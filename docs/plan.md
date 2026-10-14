@@ -85,7 +85,7 @@ The gaming PC never serves anything; it borrows work from the home server only w
 3. **Quiet hours as a backup.** A configurable window, e.g. only run 08:00–18:00 on weekdays.
 4. **One model at a time.** Each model loads, runs, and frees the GPU. This keeps peak use within the 16 GB of the RTX 4070 Ti Super.
 5. **Resumable steps.** Each step saves its own artifact. A job that disappears gets requeued after a lease timeout (e.g. 10 minutes) and resumes from the last finished step.
-6. **Lifecycle.** A systemd service starts the worker on boot; it stops cleanly on SIGTERM and returns its job to the queue.
+6. **Lifecycle.** Never unattended: the parent starts the worker by hand in the foreground (`docker compose ... up`, no `-d`, `restart: "no"`) and watches its log. Ctrl+C (SIGTERM) stops it cleanly and returns its job to the queue; jobs wait until the next session.
 7. **Optional wake-on-LAN.** A parent-mode button on the server wakes the PC when jobs are waiting.
 
 The tablet shows waiting GPU jobs as a friendly status ("your monster is sleeping") rather than an error.
