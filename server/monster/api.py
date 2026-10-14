@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import os
 import shutil
 import sqlite3
 import time
@@ -12,11 +13,14 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+import cv2
+import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
 from . import db, jobs
 from .config import Settings, load_settings
+from .steps import NEXT_STEPS
 
 TERMINAL = {"done", "failed"}
 
@@ -30,6 +34,18 @@ class Eye(BaseModel):
     x: float = Field(ge=0, le=1)
     y: float = Field(ge=0, le=1)
     r: float = Field(gt=0, le=0.5)
+
+
+class Rotate(BaseModel):
+    turns: int = Field(default=1, ge=1, le=3)  # quarter turns clockwise
+
+
+def rotate_eyes(eyes: list[dict], w: int, h: int, turns: int) -> list[dict]:
+    """Eye marks (0..1 of the cutout, r relative to its width) after turning a w x h cutout."""
+    for _ in range(turns):
+        eyes = [{"x": 1 - e["y"], "y": e["x"], "r": e["r"] * w / h} for e in eyes]
+        w, h = h, w
+    return eyes
 
 
 class CreatureUpdate(BaseModel):
@@ -67,8 +83,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def creature_out(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         job_rows = jobs.for_creature(conn, row["id"])
-        kinds = [a["kind"] for a in conn.execute(
-            "SELECT kind FROM artifacts WHERE creature_id = ? ORDER BY id", (row["id"],))]
+        # ?v= changes whenever a file is rewritten (e.g. rotated), so the tablet doesn't show a stale copy
+        files = {a["kind"]: f"/api/creatures/{row['id']}/files/{a['kind']}?v={int(a['created_at'] * 1000)}"
+                 for a in conn.execute(
+                     "SELECT kind, created_at FROM artifacts WHERE creature_id = ? ORDER BY id", (row["id"],))}
         return {
             "id": row["id"],
             "kid_id": row["kid_id"],
@@ -76,7 +94,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "created_at": row["created_at"],
             "chosen_style": row["chosen_style"],
             "eyes": json.loads(row["eyes"]),
-            "files": {k: f"/api/creatures/{row['id']}/files/{k}" for k in kinds},
+            "rotation": row["rotation"],
+            "files": files,
             "jobs": [dict(j) for j in job_rows],
         }
 
@@ -145,6 +164,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if body.eyes is not None:
             eyes = json.dumps([e.model_dump() for e in body.eyes])
             conn.execute("UPDATE creatures SET eyes = ? WHERE id = ?", (eyes, creature_id))
+        return creature_out(conn, creature_or_404(conn, creature_id))
+
+    @app.post("/creatures/{creature_id}/rotate")
+    def rotate_creature(creature_id: int, body: Rotate, conn: Conn):
+        """Turn a drawing that was made sideways. Quarter turns are lossless, so the cutout and
+        mask are turned in place right away; the 3D model and print file are made again."""
+        row = creature_or_404(conn, creature_id)
+        paths = {a["kind"]: settings.creatures_dir / a["path"] for a in conn.execute(
+            "SELECT kind, path FROM artifacts WHERE creature_id = ? AND kind IN ('cutout', 'mask')", (creature_id,))}
+        if "cutout" not in paths:
+            raise HTTPException(409, "no cutout yet")
+        h, w = cv2.imread(str(paths["cutout"]), cv2.IMREAD_UNCHANGED).shape[:2]
+        for path in paths.values():
+            img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+            tmp = path.with_suffix(".tmp" + path.suffix)
+            cv2.imwrite(str(tmp), np.ascontiguousarray(np.rot90(img, -body.turns)))
+            os.replace(tmp, path)  # the worker may be reading it
+        eyes = rotate_eyes(json.loads(row["eyes"]), w, h, body.turns)
+
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("UPDATE creatures SET rotation = (rotation + ?) % 4, eyes = ? WHERE id = ?",
+                         (body.turns, json.dumps(eyes), creature_id))
+            for kind, path in paths.items():
+                jobs.add_artifact(conn, creature_id, None, kind, f"{creature_id}/{path.name}")
+            queued = {r["step"] for r in conn.execute(
+                "SELECT step FROM jobs WHERE creature_id = ? AND status = 'queued'", (creature_id,))}
+            for step, kind in NEXT_STEPS["cleanup"]:
+                if step not in queued:  # several quick taps: one redo is enough
+                    jobs.enqueue(conn, creature_id, step, kind)
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
         return creature_out(conn, creature_or_404(conn, creature_id))
 
     @app.delete("/creatures/{creature_id}", status_code=204)

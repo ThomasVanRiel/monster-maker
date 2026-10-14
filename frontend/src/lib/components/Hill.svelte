@@ -17,7 +17,8 @@
 		onglass,
 		onaddphoto,
 		ondelete,
-		onpuff
+		onpuff,
+		onrotate
 	}: {
 		kids: Kid[];
 		creatures: Creature[];
@@ -28,6 +29,7 @@
 		onaddphoto: () => void;
 		ondelete: (id: number) => void;
 		onpuff: (id: number) => void;
+		onrotate: (id: number) => void;
 	} = $props();
 
 	let vw = $state(innerWidth);
@@ -160,6 +162,13 @@
 								><path d="M7 9V3h10v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg
 							>
 						</a>
+					{/if}
+					{#if cr.files.cutout}
+						<button type="button" class="turn" aria-label="Turn {cr.name || 'this monster'}" onclick={() => onrotate(cr.id)}>
+							<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+								><path d="M4 12a8 8 0 0 1 14.3-4.9" /><path d="M19 3v5h-5" /><path d="M20 12a8 8 0 0 1-14.3 4.9" /></svg
+							>
+						</button>
 					{/if}
 					<button
 						type="button"
@@ -547,6 +556,28 @@
 		width: 60%;
 	}
 	.parent .print {
+		display: grid;
+	}
+	.turn {
+		display: none;
+		position: absolute;
+		top: -4px;
+		left: 50%;
+		translate: -50% 0;
+		width: 52px;
+		height: 52px;
+		border-radius: 50%;
+		border: 4px solid var(--paper);
+		background: var(--ink-soft);
+		place-items: center;
+		cursor: pointer;
+		padding: 0;
+		z-index: 2;
+	}
+	.turn svg {
+		width: 62%;
+	}
+	.parent .turn {
 		display: grid;
 	}
 	.parent .puff {

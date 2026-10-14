@@ -11,6 +11,7 @@ export type Creature = {
 	created_at: number;
 	chosen_style: string | null;
 	eyes: Eye[];
+	rotation: number;
 	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'mesh_faithful' | 'print_3mf', string>>;
 	jobs: Job[];
 };
@@ -33,6 +34,12 @@ export const getCreature = (id: number) => call<Creature>('GET', `/creatures/${i
 export const updateCreature = (id: number, patch: { name?: string; eyes?: Eye[] }) =>
 	call<Creature>('PATCH', `/creatures/${id}`, patch);
 export const deleteCreature = (id: number) => call<void>('DELETE', `/creatures/${id}`);
+/** Turn a sideways drawing a quarter turn clockwise (the server redoes 3D and print). */
+export const rotateCreature = (id: number) => call<Creature>('POST', `/creatures/${id}/rotate`, { turns: 1 });
+
+/** Eye marks after turning a w x h cutout a quarter turn clockwise (same as the server). */
+export const rotateEyes = (eyes: Eye[], w: number, h: number): Eye[] =>
+	eyes.map((e) => ({ x: 1 - e.y, y: e.x, r: (e.r * w) / h }));
 
 export function uploadPhoto(kidId: number, photo: Blob): Promise<Creature> {
 	const form = new FormData();
@@ -41,16 +48,21 @@ export function uploadPhoto(kidId: number, photo: Blob): Promise<Creature> {
 	return call<Creature>('POST', '/creatures', form);
 }
 
-/** Resolves when every job of the creature has finished (true) or one failed (false). */
-export function whenJobsSettle(id: number): Promise<boolean> {
+/** Resolves when the creature's `step` job has finished (true) or failed (false). Later steps
+ *  (3D, print) keep running on the server; nobody has to wait for them. */
+export function whenStepSettles(id: number, step = 'cleanup'): Promise<boolean> {
 	return new Promise((resolve) => {
 		const es = new EventSource(`/api/creatures/${id}/events`);
-		let jobs: Job[] = [];
-		es.addEventListener('jobs', (e) => (jobs = JSON.parse((e as MessageEvent).data)));
-		es.addEventListener('end', () => {
+		const done = (ok: boolean) => {
 			es.close();
-			resolve(jobs.every((j) => j.status === 'done'));
+			resolve(ok);
+		};
+		es.addEventListener('jobs', (e) => {
+			const job = (JSON.parse((e as MessageEvent).data) as Job[]).find((j) => j.step === step);
+			if (job?.status === 'done') done(true);
+			else if (job?.status === 'failed') done(false);
 		});
+		es.addEventListener('end', () => done(false)); // everything settled without that step
 		// EventSource reconnects by itself on network hiccups; only give up if it is closed for good.
 		es.onerror = () => {
 			if (es.readyState === EventSource.CLOSED) resolve(false);

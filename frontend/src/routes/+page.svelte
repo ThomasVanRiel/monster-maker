@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Monster Hill: hill (gallery) -> magic glass (camera) -> sleep & wake -> back to the hill.
 	import { onDestroy, onMount } from 'svelte';
-	import { deleteCreature, listCreatures, listKids, type Creature, type Kid } from '#lib/api.ts';
+	import { deleteCreature, listCreatures, listKids, rotateCreature, type Creature, type Kid } from '#lib/api.ts';
 	import { prefs } from '#lib/prefs.svelte.ts';
 	import { sfx } from '#lib/sfx.ts';
 	import Hill from '#lib/components/Hill.svelte';
@@ -75,6 +75,16 @@
 		screen = 'hill';
 	}
 
+	async function rotate(id: number) {
+		sfx.pop();
+		try {
+			const c = await rotateCreature(id);
+			creatures = creatures.map((x) => (x.id === id ? c : x));
+		} catch {
+			/* not turned; nothing to show */
+		}
+	}
+
 	async function remove(id: number) {
 		creatures = creatures.filter((c) => c.id !== id);
 		await deleteCreature(id).catch(() => {});
@@ -93,6 +103,7 @@
 		onglass={() => (screen = 'lens')}
 		onaddphoto={() => fileAny.click()}
 		ondelete={remove}
+		onrotate={rotate}
 		onpuff={(id) => {
 			puffId = id;
 			screen = 'puff';

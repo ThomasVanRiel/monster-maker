@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS creatures (
     name          TEXT,
     created_at    REAL NOT NULL,
     chosen_style  TEXT,
-    eyes          TEXT NOT NULL DEFAULT '[]'   -- rigging aid: JSON [{x, y, r}] in cutout coordinates (0..1)
+    eyes          TEXT NOT NULL DEFAULT '[]',  -- rigging aid: JSON [{x, y, r}] in cutout coordinates (0..1)
+    rotation      INTEGER NOT NULL DEFAULT 0   -- quarter turns clockwise applied to the cutout (0-3)
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -62,8 +63,21 @@ def connect(db_path: Path) -> sqlite3.Connection:
 DEFAULT_KIDS = [("Kid 1", "#FF8A3D"), ("Kid 2", "#3D7BFF")]
 
 
+# Columns added after the first deploy: CREATE TABLE IF NOT EXISTS won't add them to an old file.
+MIGRATIONS = [
+    ("creatures", "rotation", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
 def init(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for table, column, decl in MIGRATIONS:
+        if column not in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            except sqlite3.OperationalError as e:  # the API and the worker start at the same time
+                if "duplicate column" not in str(e):
+                    raise
     conn.execute("BEGIN IMMEDIATE")
     if conn.execute("SELECT COUNT(*) FROM kids").fetchone()[0] == 0:
         conn.executemany("INSERT INTO kids (name, color) VALUES (?, ?)", DEFAULT_KIDS)

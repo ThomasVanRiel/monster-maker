@@ -138,3 +138,55 @@ def test_worker_backfills_steps_added_later(client, settings):
     steps = [r[0] for r in conn.execute("SELECT step FROM jobs WHERE creature_id = ? ORDER BY id", (cid,))]
     assert steps == ["cleanup", "balloon", "print_prep"]
     conn.close()
+
+
+def test_rotate_turns_cutout_and_eyes_and_redoes_3d_once(client, settings):
+    cid = upload(client, 1, photo_bytes(640, 360)).json()["id"]
+    conn = db.connect(settings.db_path)
+    for _ in range(3):  # cleanup, balloon, print_prep
+        worker.run_one(conn, settings, jobs.claim(conn, "cpu", "test", 60, 3), "test")
+    client.patch(f"/creatures/{cid}", json={"eyes": [{"x": 0.25, "y": 0.5, "r": 0.05}]})
+    before = client.get(f"/creatures/{cid}").json()
+    cut0 = np.asarray(Image.open(io.BytesIO(client.get(f"/creatures/{cid}/files/cutout").content)))
+
+    client.post(f"/creatures/{cid}/rotate", json={})
+    c = client.post(f"/creatures/{cid}/rotate", json={"turns": 1}).json()  # a second quick tap
+    cut2 = np.asarray(Image.open(io.BytesIO(client.get(f"/creatures/{cid}/files/cutout").content)))
+    assert np.array_equal(cut2, np.rot90(cut0, -2))  # two quarter turns, lossless
+    assert c["rotation"] == 2
+    assert c["files"]["cutout"] != before["files"]["cutout"]  # new ?v= so the tablet reloads it
+    e = c["eyes"][0]
+    assert abs(e["x"] - 0.75) < 1e-9 and abs(e["y"] - 0.5) < 1e-9 and abs(e["r"] - 0.05) < 1e-9
+    queued = [j["step"] for j in c["jobs"] if j["status"] == "queued"]
+    assert queued == ["balloon", "print_prep"]  # redone once, not once per tap
+    conn.close()
+
+
+def test_rotate_needs_a_cutout(client):
+    cid = upload(client, 1).json()["id"]
+    assert client.post(f"/creatures/{cid}/rotate", json={}).status_code == 409
+    assert client.post("/creatures/999/rotate", json={}).status_code == 404
+    assert client.post(f"/creatures/{cid}/rotate", json={"turns": 4}).status_code == 422
+
+
+def test_rotate_eyes_quarter_turns():
+    from monster.api import rotate_eyes
+    eye = [{"x": 0.2, "y": 0.1, "r": 0.05}]
+    one = rotate_eyes(eye, 200, 100, 1)[0]  # 200 wide, 100 tall -> 100 wide, 200 tall
+    assert (round(one["x"], 9), round(one["y"], 9), round(one["r"], 9)) == (0.9, 0.2, 0.1)
+    back = rotate_eyes(eye, 200, 100, 4)[0]
+    assert all(abs(back[k] - eye[0][k]) < 1e-9 for k in "xyr")
+
+
+def test_old_database_gets_the_rotation_column(tmp_path):
+    import sqlite3
+    old = sqlite3.connect(tmp_path / "old.sqlite")
+    old.executescript("CREATE TABLE creatures (id INTEGER PRIMARY KEY, kid_id INTEGER NOT NULL, name TEXT,"
+                      " created_at REAL NOT NULL, chosen_style TEXT, eyes TEXT NOT NULL DEFAULT '[]');"
+                      "INSERT INTO creatures (kid_id, created_at) VALUES (1, 0);")
+    old.close()
+    conn = db.connect(tmp_path / "old.sqlite")
+    db.init(conn)
+    db.init(conn)  # idempotent
+    assert conn.execute("SELECT rotation FROM creatures").fetchone()[0] == 0
+    conn.close()

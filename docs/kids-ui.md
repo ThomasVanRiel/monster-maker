@@ -19,6 +19,7 @@ Chosen over "Magic Book" and "Monster Machine".
 - **Camera = magnifying glass.** The home button is a brass magnifying glass, bottom-right. The camera screen shows the live view inside a giant lens on a dark background, with a big red shutter button and a small "from photos" button. The lens is framing only: the full frame is captured and the server crops to the paper.
 - **Waiting moment = the creature sleeps.** Night falls, the creature lies dimmed under a yellow blanket with floating z's, then wakes up (blanket slides away, day returns). No eggs or hatching — kids may draw mammals.
 - **Blink.** Eyes can't be detected in drawings, so after waking the parent taps each eye (the first rigging aid). Creatures without marked eyes do a small squash instead of a blink.
+- **Turn.** Drawings made with the pad sideways can be turned a quarter turn per tap (button with a tilted yellow square, next to the eyes button; also in parent mode on the hill). The app can't know which way is up, so the kid or parent decides.
 - **Naming.** A sheet with a text field (parent types), a big green save button.
 - **Parent mode.** Shows a bar with settings (e.g. sound) and a red delete button on each creature (tap twice to confirm).
 

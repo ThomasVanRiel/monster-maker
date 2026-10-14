@@ -52,7 +52,7 @@ Code is developed on several machines; none of them is the server. Git is the si
 Kid → Creature (one per drawing) → Jobs (pipeline steps) → Artifacts (files).
 
 - Kid: id, name, avatar colour
-- Creature: id, kid_id, name, created_at, chosen_style
+- Creature: id, kid_id, name, created_at, chosen_style, eyes, rotation (quarter turns applied to the cutout, for drawings made sideways)
 - Job: id, creature_id, step, status (`queued`, `running`, `done`, `failed`, `waiting_for_gpu`), worker (`cpu`/`gpu`), attempts, error, lease
 - Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, later `mesh_faithful`, `mesh_ai`, `rig`, `anim`, `print_3mf`), path
 
@@ -67,6 +67,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 - [x] Jobs table with leases and server-sent progress events
 - [x] CPU worker: perspective crop, background removal, cutout and mask (`server/monster/steps/cleanup.py`)
 - [x] Instant wobble, bounce and blink of the cutout in the browser
+- [x] Turn button for drawings made sideways (wake screen and parent mode): `POST /creatures/{id}/rotate` turns cutout, mask and eye marks losslessly and redoes 3D and print
 - [ ] Test with real drawings from the kids; note which ones fail — two fixtures so far (`monster-1`: shadow, outline gaps, faint strokes; `monster-2`: ruled pad, printed logos, wooden desk); both pass
 
 ## Phase 2 — 3D creatures

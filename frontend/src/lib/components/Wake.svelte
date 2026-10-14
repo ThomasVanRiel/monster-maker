@@ -3,7 +3,7 @@
 	// creature wakes up under its blanket, the parent can mark eyes and type a name, then save.
 	// A slow or failed cleanup is never an error: the monster just stays asleep for now.
 	import { onDestroy, onMount } from 'svelte';
-	import { deleteCreature, getCreature, updateCreature, uploadPhoto, whenJobsSettle, type Eye } from '../api';
+	import { deleteCreature, getCreature, rotateCreature, rotateEyes, updateCreature, uploadPhoto, whenStepSettles, type Eye } from '../api';
 	import { Critter, replay } from '../critter';
 	import { sfx } from '../sfx';
 
@@ -41,7 +41,7 @@
 			const c = await uploadPhoto(kidId, photo);
 			creatureId = c.id;
 			if (gone) return void deleteCreature(c.id).catch(() => {});
-			const ok = await whenJobsSettle(c.id);
+			const ok = await whenStepSettles(c.id, 'cleanup');
 			if (gone) return;
 			const cutout = ok ? (await getCreature(c.id)).files.cutout : undefined;
 			if (!cutout) throw new Error('no cutout');
@@ -70,6 +70,34 @@
 		phase = 'awake';
 		replay(bod);
 		sfx.tada();
+	}
+
+	// Drawn sideways? A quarter turn per tap; the server turns the cutout and redoes 3D and print.
+	let turning = $state(false);
+	async function turn() {
+		if (creatureId == null || !critter || turning) return;
+		turning = true;
+		sfx.pop();
+		try {
+			const c = await rotateCreature(creatureId);
+			const im = new Image();
+			im.src = c.files.cutout!;
+			await im.decode();
+			if (gone) return;
+			eyes = rotateEyes(eyes, critter.iw, critter.ih);
+			critter.destroy();
+			critter = new Critter(canvas, im, { eyes });
+			critter.showEyes = marking;
+			if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+				bod.animate([{ transform: 'rotate(-90deg) scale(0.9)' }, { transform: 'none' }], {
+					duration: 380,
+					easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+				});
+		} catch {
+			/* server busy or unreachable: it just doesn't turn */
+		} finally {
+			turning = false;
+		}
 	}
 
 	function setMarking(on: boolean) {
@@ -175,6 +203,17 @@
 					stroke-linecap="round"
 					stroke-linejoin="round"
 					aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg
+				>
+			</button>
+			<button class="big plain" type="button" aria-label="Turn the monster" disabled={turning} onclick={turn}>
+				<svg
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="#2E2A3B"
+					stroke-width="2.4"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="M12 8 19 15 12 22 5 15Z" fill="#FFD45C" /><path d="M3.5 10a9.5 7.5 0 0 1 15.5-5.5" /><path d="M20 1.5v4.5h-4.5" /></svg
 				>
 			</button>
 			<label class="sr" for="cname">Monster name</label>
