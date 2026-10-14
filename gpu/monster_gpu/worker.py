@@ -129,7 +129,10 @@ class Worker:
             self.child = subprocess.Popen(
                 [sys.executable, "-m", "monster_gpu.run_step", self.steps[job["step"]],
                  str(work / "inputs.json"), str(out)],
-                stdout=logf, stderr=subprocess.STDOUT, env=child_env())
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=child_env())
+            # the step's own output (model downloads, progress) into the worker's log as well
+            tee = threading.Thread(target=_tee, args=(self.child.stdout, logf), daemon=True)
+            tee.start()
             last_beat = time.monotonic()
             try:
                 while True:
@@ -151,6 +154,7 @@ class Worker:
                         last_beat = time.monotonic()
             finally:
                 self.kill_child()
+                tee.join(5)
         if self.child.returncode != 0:
             tail = log_path.read_bytes()[-6000:].decode(errors="replace")
             return "failed", f"exit code {self.child.returncode}\n{tail}"
@@ -187,6 +191,17 @@ class Worker:
                 log.info("job %s: done", job["id"])
             return
         self.post(f"worker/jobs/{job['id']}/release", json=self.hello())
+
+
+def _tee(pipe, logf) -> None:
+    """Copy the child's output to its log file and to our stdout as it comes."""
+    out = getattr(sys.stdout, "buffer", None)
+    while chunk := os.read(pipe.fileno(), 65536):
+        logf.write(chunk)
+        if out is not None:
+            out.write(chunk)
+            out.flush()
+    pipe.close()
 
 
 def child_env() -> dict[str, str]:
