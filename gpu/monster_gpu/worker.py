@@ -200,6 +200,7 @@ def main() -> None:
     import httpx
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per poll otherwise
     settings = load_settings()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):

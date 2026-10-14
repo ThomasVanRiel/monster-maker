@@ -19,6 +19,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked && uv run pytest -q
         working-directory: server
+      - run: uv sync --locked && uv run pytest -q
+        working-directory: gpu
 
   frontend:
     runs-on: ubuntu-latest

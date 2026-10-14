@@ -1,14 +1,35 @@
 <script lang="ts">
 	// The puffy 3D monster: the balloon version of the drawing turning on the hill. Kids spin it
 	// with a finger; the AR button (only where the tablet supports it) puts it on the table.
+	// Once the gaming PC has made the AI version, it spins in a bubble in the corner: tapping the
+	// bubble swaps the two, and the one in front is the kid's pick (chosen_style).
 	// model-viewer (and three.js) load only when this screen opens.
-	import { onMount } from 'svelte';
-	import type { Creature } from '../api';
+	import { onMount, untrack } from 'svelte';
+	import type { Creature, Style } from '../api';
 	import { sfx } from '../sfx';
 
-	let { creature, onback }: { creature: Creature; onback: () => void } = $props();
+	let {
+		creature,
+		onback,
+		onchoose
+	}: { creature: Creature; onback: () => void; onchoose: (style: Style) => void } = $props();
 	let ready = $state(false);
 	let shown = $state(false);
+
+	const src = (style: Style) => (style === 'ai' ? creature.files.mesh_ai : creature.files.mesh_faithful);
+	const hasAi = $derived(!!creature.files.mesh_ai && !!creature.files.mesh_faithful);
+	// a pick of the AI version falls back to the balloon while the AI one is being made again
+	let front = $state<Style>(
+		untrack(() => (creature.chosen_style === 'ai' && creature.files.mesh_ai ? 'ai' : 'faithful'))
+	);
+	const other = $derived<Style>(front === 'ai' ? 'faithful' : 'ai');
+
+	function swap() {
+		sfx.boing();
+		shown = false;
+		front = other;
+		onchoose(front);
+	}
 
 	onMount(async () => {
 		await import('@google/model-viewer');
@@ -21,8 +42,8 @@
 
 	{#if ready}
 		<model-viewer
-			src={creature.files.mesh_faithful}
-			alt="{creature.name || 'Monster'}, puffed up in 3D"
+			src={src(front)}
+			alt="{creature.name || 'Monster'}, {front === 'ai' ? 'imagined' : 'puffed up'} in 3D"
 			camera-controls
 			disable-zoom
 			disable-pan
@@ -50,6 +71,29 @@
 				>
 			</button>
 		</model-viewer>
+		{#if hasAi}
+			<button class="bubble" type="button" aria-label="Show the other monster" onclick={swap}>
+				<model-viewer
+					src={src(other)}
+					alt=""
+					auto-rotate
+					auto-rotate-delay="0"
+					rotation-per-second="60deg"
+					interaction-prompt="none"
+					camera-orbit="0deg 80deg auto"
+					exposure="1.1"
+				></model-viewer>
+				<span class="mark" class:ai={other === 'ai'} aria-hidden="true">
+					{#if other === 'ai'}
+						<svg viewBox="0 0 24 24"
+							><path d="M12 2 L14.2 9.2 L21.5 9.5 L15.6 13.9 L17.8 21 L12 16.7 L6.2 21 L8.4 13.9 L2.5 9.5 L9.8 9.2 Z" /></svg
+						>
+					{:else}
+						<svg viewBox="0 0 24 24"><ellipse cx="12" cy="11" rx="7" ry="8.5" /><path d="M12 19.5 L10.5 22 H13.5 Z" /></svg>
+					{/if}
+				</span>
+			</button>
+		{/if}
 	{/if}
 	{#if !shown}
 		<div class="waiting" aria-hidden="true"><span></span></div>
@@ -121,6 +165,59 @@
 			transform: scale(1.25);
 		}
 	}
+	.bubble {
+		position: absolute;
+		left: calc(24px + env(safe-area-inset-left, 0px));
+		bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+		width: clamp(120px, 24vmin, 200px);
+		aspect-ratio: 1;
+		border-radius: 50%;
+		border: 6px solid var(--ink);
+		background: rgba(255, 255, 255, 0.7);
+		box-shadow: 0 6px 0 rgba(46, 42, 59, 0.25);
+		padding: 0;
+		cursor: pointer;
+		overflow: visible;
+		animation: bob 2.4s ease-in-out infinite;
+	}
+	.bubble model-viewer {
+		inset: 0;
+		border-radius: 50%;
+		overflow: hidden;
+		pointer-events: none;
+		opacity: 1;
+		transform: none;
+	}
+	.mark {
+		position: absolute;
+		top: -10px;
+		right: -10px;
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		border: 4px solid var(--ink);
+		background: var(--paper);
+		display: grid;
+		place-items: center;
+	}
+	.mark svg {
+		width: 70%;
+		fill: var(--hill);
+		stroke: var(--ink);
+		stroke-width: 2;
+		stroke-linejoin: round;
+	}
+	.mark.ai {
+		background: var(--night);
+	}
+	.mark.ai svg {
+		fill: var(--sun);
+	}
+	@keyframes bob {
+		50% {
+			transform: translateY(-8px);
+		}
+	}
 	.back,
 	.ar {
 		position: absolute;
@@ -158,7 +255,8 @@
 			transition: opacity 0.3s;
 			transform: none;
 		}
-		.waiting span {
+		.waiting span,
+		.bubble {
 			animation: none;
 		}
 	}

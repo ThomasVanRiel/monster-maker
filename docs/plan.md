@@ -133,6 +133,12 @@ Phase 1 delivers the "it's alive!" moment with the least machinery; each later p
 
 `balloon` CPU step after `cleanup`: the sticker's shape inflated (Poisson, then square root: a disc becomes a flattened hemisphere), drawing as texture front and back, closed mesh, about 20 cm tall → `faithful.glb` (artifact `mesh_faithful`). On the tablet: a yellow 3D badge on the hill opens a spinning view with AR, via a bundled `<model-viewer>`. Next: the GPU worker and TRELLIS.2 for the AI version beside it.
 
+### Phase 2, second step: GPU worker and TRELLIS.2 (built, not yet run on the PC)
+
+Branch `phase2-gpu-trellis`. The `ai3d` GPU step after `cleanup` turns `creature.png` (the creature alone, its mask as alpha, so TRELLIS's own background remover is never loaded) into `ai.glb` (artifact `mesh_ai`), scaled like the balloon. The worker pulls over HTTPS with a shared token: `POST /worker/claim`, heartbeat, `done` (multipart upload; the server picks the file names and checks the GLB), `fail`, `release`. GPU jobs wait as `waiting_for_gpu`, which the tablet treats as settled. Each job runs in a fresh process (VRAM is free afterwards; a game starting mid-job kills it and hands the job back). Game check: Steam/Proton process names via `pid: host`, plus VRAM in use by others. On the tablet the other version spins in a bubble; tapping it swaps them and sets `chosen_style`. Parent mode shows the PC's state.
+
+Open: does `1024_cascade` fit 16 GB with low-VRAM mode (falls back to `512` on out-of-memory)? Which way does the result face? DINOv3 is gated on Hugging Face (needs a token once); its licence is worldwide, with Meta Platforms Ireland as licensor in the EEA, so unlike Hunyuan3D it covers Belgium. AI versions aren't printed yet: `print_prep` still uses the balloon.
+
 ### Phase 3, first step: print prep (done)
 
 `print_prep` CPU step after `cleanup` → `print.3mf` for the home printer, a Prusa MK3S+ (single colour, 0.4 mm nozzle). Two objects: "standing" (balloon 8 cm tall, feet sunk 2 mm into a 3 mm oval plinth at least 40% as deep as it is tall) and "lying" (front half on a 1.6 mm plate, no supports). One colour can't show the drawing, so thin dark strokes are engraved 0.6 mm deep, widened to ~1 mm. Both are checked as closed solids (manifold3d); the plinth is a boolean union. Downloaded from parent mode.

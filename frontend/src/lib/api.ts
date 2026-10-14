@@ -4,15 +4,16 @@ export type Kid = { id: number; name: string; color: string };
 export type Eye = { x: number; y: number; r: number };
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'waiting_for_gpu';
 export type Job = { id: number; step: string; status: JobStatus; worker: 'cpu' | 'gpu'; attempts: number; error: string | null };
+export type Style = 'faithful' | 'ai';
 export type Creature = {
 	id: number;
 	kid_id: number;
 	name: string | null;
 	created_at: number;
-	chosen_style: string | null;
+	chosen_style: Style | null;
 	eyes: Eye[];
 	rotation: number;
-	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'mesh_faithful' | 'print_3mf', string>>;
+	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'mesh_ai' | 'print_3mf', string>>;
 	jobs: Job[];
 };
 
@@ -31,9 +32,19 @@ async function call<T>(method: string, path: string, body?: BodyInit | object): 
 export const listKids = () => call<Kid[]>('GET', '/kids');
 export const listCreatures = (kidId: number) => call<Creature[]>('GET', `/creatures?kid_id=${kidId}`);
 export const getCreature = (id: number) => call<Creature>('GET', `/creatures/${id}`);
-export const updateCreature = (id: number, patch: { name?: string; eyes?: Eye[] }) =>
+export const updateCreature = (id: number, patch: { name?: string; eyes?: Eye[]; chosen_style?: Style }) =>
 	call<Creature>('PATCH', `/creatures/${id}`, patch);
 export const deleteCreature = (id: number) => call<void>('DELETE', `/creatures/${id}`);
+/** The gaming PC that makes the AI 3D versions: is it around, and how much waits for it. */
+export type GpuStatus = {
+	enabled: boolean;
+	waiting: number;
+	running: number;
+	workers: { id: string; state: string; detail: string | null; last_seen: number }[];
+	now: number;
+};
+export const getGpu = () => call<GpuStatus>('GET', '/gpu');
+
 /** Turn a sideways drawing a quarter turn clockwise (the server redoes 3D and print). */
 export const rotateCreature = (id: number) => call<Creature>('POST', `/creatures/${id}/rotate`, { turns: 1 });
 

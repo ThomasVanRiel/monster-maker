@@ -1,7 +1,16 @@
 <script lang="ts">
 	// Monster Hill: hill (gallery) -> magic glass (camera) -> sleep & wake -> back to the hill.
 	import { onDestroy, onMount } from 'svelte';
-	import { deleteCreature, listCreatures, listKids, rotateCreature, type Creature, type Kid } from '#lib/api.ts';
+	import {
+		deleteCreature,
+		listCreatures,
+		listKids,
+		rotateCreature,
+		updateCreature,
+		type Creature,
+		type Kid,
+		type Style
+	} from '#lib/api.ts';
 	import { prefs } from '#lib/prefs.svelte.ts';
 	import { sfx } from '#lib/sfx.ts';
 	import Hill from '#lib/components/Hill.svelte';
@@ -35,10 +44,14 @@
 	const stillSleeping = $derived(
 		creatures.some((c) => c.jobs.some((j) => j.status === 'queued' || j.status === 'running'))
 	);
+	// AI versions come from the gaming PC whenever it is free: look again now and then, slowly.
+	const waitingForGpu = $derived(
+		creatures.some((c) => c.jobs.some((j) => j.status === 'waiting_for_gpu'))
+	);
 	let poll: ReturnType<typeof setInterval> | undefined;
 	$effect(() => {
-		if (screen !== 'hill' || !stillSleeping) return;
-		poll = setInterval(refresh, 4000);
+		if (screen !== 'hill' || !(stillSleeping || waitingForGpu)) return;
+		poll = setInterval(refresh, stillSleeping ? 4000 : 60000);
 		return () => clearInterval(poll);
 	});
 
@@ -85,6 +98,11 @@
 		}
 	}
 
+	async function choose(id: number, style: Style) {
+		creatures = creatures.map((x) => (x.id === id ? { ...x, chosen_style: style } : x));
+		await updateCreature(id, { chosen_style: style }).catch(() => {});
+	}
+
 	async function remove(id: number) {
 		creatures = creatures.filter((c) => c.id !== id);
 		await deleteCreature(id).catch(() => {});
@@ -110,7 +128,7 @@
 		}}
 	/>
 {:else if screen === 'puff' && puffed}
-	<Puff creature={puffed} onback={() => (screen = 'hill')} />
+	<Puff creature={puffed} onback={() => (screen = 'hill')} onchoose={(style) => choose(puffed.id, style)} />
 {:else if screen === 'lens' && kid}
 	<Lens kidColor={kid.color} onphoto={takePhoto} onback={() => (screen = 'hill')} />
 {:else if screen === 'wake' && kid && photo}

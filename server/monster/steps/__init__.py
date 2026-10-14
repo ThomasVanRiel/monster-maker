@@ -19,7 +19,7 @@ class GpuStep:
     the creature has, per input name) and uploads `outputs`; the server picks the file names."""
     inputs: dict[str, tuple[str, ...]]
     outputs: dict[str, str]          # artifact kind -> file name in the creature's folder
-    max_mb: int = 40                 # per uploaded file
+    max_mb: int = 24                 # per uploaded file; the host's nginx stops bodies over 25 MB
 
 
 GPU_STEPS: dict[str, GpuStep] = {
