@@ -74,6 +74,9 @@ services:
       MONSTER_MAX_OTHER_VRAM_MB: ${MONSTER_MAX_OTHER_VRAM_MB:-2048}
       MONSTER_GAME_PATTERNS: ${MONSTER_GAME_PATTERNS:-steamapps/common/,wine64-preloader,wineserver,gamescope}
       MONSTER_GPU_HOURS: ${MONSTER_GPU_HOURS:-}
+      MONSTER_IMAGINE_PROMPT: ${MONSTER_IMAGINE_PROMPT:-}
+      MONSTER_IMAGINE_SEED: ${MONSTER_IMAGINE_SEED:-42}
+      MONSTER_IMAGINE_OFFLOAD: ${MONSTER_IMAGINE_OFFLOAD:-1}
       MONSTER_TRELLIS_PIPELINE: ${MONSTER_TRELLIS_PIPELINE:-1024_cascade}
       MONSTER_TRELLIS_LOW_VRAM: ${MONSTER_TRELLIS_LOW_VRAM:-1}
       MONSTER_AI_FACES: ${MONSTER_AI_FACES:-150000}
@@ -83,7 +86,7 @@ services:
     volumes:
       - ./gpu/monster_gpu:/app/monster_gpu
       - ./data:/data  # for try_step on a creature's creature.png
-      - ${CACHE_DIR:-./cache}:/cache  # model weights (~16 GB), kept between runs
+      - ${CACHE_DIR:-./cache}:/cache  # model weights (~35 GB), kept between runs
     depends_on:
       - api
     stop_grace_period: 40s

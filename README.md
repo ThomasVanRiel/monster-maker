@@ -78,19 +78,19 @@ Tuned for a single-colour FDM printer with a 0.4 mm nozzle (Prusa MK3S+ with Pru
 
 ## AI 3D (GPU worker on the gaming PC)
 
-Beside the faithful balloon, the gaming PC makes an AI version with [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT). On the 3D screen it spins in a bubble in the corner; tapping the bubble swaps the two, and the one in front is the kid's pick. A sparkle on the hill's 3D badge means the AI version is there. Parent mode shows whether the PC is ready, gaming or off, and how many monsters wait for it.
+Beside the faithful balloon, the gaming PC makes an AI version in two steps: `imagine` redraws the monster as a character from an animated film with [FLUX.2 \[klein\] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0) and cuts it out with [BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet) (MIT) → `imagined.png`; `ai3d` turns that picture into 3D with [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT). TRELLIS copies the picture it gets, so from the drawing itself it only made a puffed-up drawing; the film character gives it volume and a face to copy. On the 3D screen it spins in a bubble in the corner; tapping the bubble swaps the two, and the one in front is the kid's pick. A sparkle on the hill's 3D badge means the AI version is there. Parent mode shows whether the PC is ready, gaming or off, and how many monsters wait for it.
 
-The worker runs only while you have it open in a terminal. It only pulls: every 30 s it checks it is free (no Steam/Proton game running, less than 2 GB VRAM in use by others, inside `MONSTER_GPU_HOURS`), asks the server for a job, runs it in a fresh process and uploads the GLB. A game starting mid-job stops it and hands it back. With the PC off, jobs wait as `waiting_for_gpu` and the tablet doesn't care.
+The worker runs only while you have it open in a terminal. It only pulls: every 30 s it checks it is free (no Steam/Proton game running, less than 2 GB VRAM in use by others, inside `MONSTER_GPU_HOURS`), asks the server for a job, runs it in a fresh process and uploads the result. A game starting mid-job stops it and hands it back. With the PC off, jobs wait as `waiting_for_gpu` and the tablet doesn't care.
 
 Setup, once:
 
 1. Home server: put a `MONSTER_WORKER_TOKEN` (`openssl rand -hex 32`) in `.env`, `docker compose up -d`. Until then the GPU endpoints are off.
 2. Gaming PC: NVIDIA driver plus the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (Arch: `sudo pacman -S --needed nvidia-container-toolkit && sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`). Check with `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`.
 3. Gaming PC: a directory with `compose.gpu.yaml` and a `.env` (gaming PC section of `.env.example`: `REGISTRY`, `MONSTER_SERVER`, the same `MONSTER_WORKER_TOKEN`, `HF_TOKEN`). Create `CACHE_DIR` owned by `PUID` first. `docker login ghcr.io` as on the server.
-4. Hugging Face: TRELLIS.2 needs Meta's DINOv3 image encoder, which is gated: accept its licence on its [model page](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m) and put a read token in `HF_TOKEN`. The weights (~16 GB) download once into `CACHE_DIR`; drawings never leave the house.
+4. Hugging Face: TRELLIS.2 needs Meta's DINOv3 image encoder, which is gated: accept its licence on its [model page](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m) and put a read token in `HF_TOKEN`. The weights (~35 GB: TRELLIS ~16, FLUX.2 klein with its text encoder ~16, BiRefNet ~1) download once into `CACHE_DIR`; drawings never leave the house.
 5. Run it by hand, in the foreground: `docker compose -f compose.gpu.yaml pull && docker compose -f compose.gpu.yaml up`. It never runs unattended: no `-d`, no restart policy, nothing at boot. Ctrl+C stops it and hands a running job back; jobs then wait until the next time you start it.
 
-Test in two steps: first with `MONSTER_GPU_PLACEHOLDER=1` (no model: the drawing on a flat card) to check the round trip, then without it. The image is built by `.github/workflows/gpu.yml` when `gpu/` changes on `main`, or by hand from the Actions tab.
+Test in two steps: first with `MONSTER_GPU_PLACEHOLDER=1` (no model: the drawing itself on a flat card) to check the round trip, then without it. The image is built by `.github/workflows/gpu.yml` when `gpu/` changes on `main`, or by hand from the Actions tab.
 
 ### Trying it from a clone on the gaming PC
 
@@ -103,13 +103,13 @@ echo "HF_TOKEN=hf_..." > .env            # after accepting the DINOv3 licence
 docker compose -f compose.dev.yaml --profile gpu up --build
 ```
 
-The first build compiles the CUDA extensions (~30–60 min). Then open http://localhost:8099, unlock parent mode (hold the lock) and use "Add from photos" with `tests/fixtures/*.jpeg`. The first AI job also downloads ~16 GB of weights into `cache/`. Follow it with `docker compose -f compose.dev.yaml logs -f gpu-worker`; the sparkle appears on the 3D badge when it is done.
+The first build compiles the CUDA extensions (~30–60 min). Then open http://localhost:8099, unlock parent mode (hold the lock) and use "Add from photos" with `tests/fixtures/*.jpeg`. The first AI jobs also download ~35 GB of weights into `cache/`. Follow it with `docker compose -f compose.dev.yaml logs -f gpu-worker`; the sparkle appears on the 3D badge when it is done.
 
 - Plumbing only, no model: add `MONSTER_GPU_PLACEHOLDER=1` to `.env`.
-- TRELLIS alone on one picture, with timing and peak VRAM: `docker compose -f compose.dev.yaml --profile gpu run --rm gpu-worker python -m monster_gpu.try_step ai3d /data/creatures/1/creature.png /data/try` (the result is `data/try/ai.glb`; drop it on https://gltf-viewer.donmccurdy.com or open it in Blender).
+- One step on one picture, with timing and peak VRAM: `docker compose -f compose.dev.yaml --profile gpu run --rm gpu-worker python -m monster_gpu.try_step imagine /data/creatures/1/creature.png /data/try` makes `data/try/imagined.png`; then `... try_step ai3d /data/try/imagined.png /data/try` makes `data/try/ai.glb` (drop it on https://gltf-viewer.donmccurdy.com or open it in Blender).
 - Game check: start a Steam game while a job runs; the log shows it being handed back.
 
-Tuning (gaming PC `.env`): `MONSTER_TRELLIS_PIPELINE` (`1024_cascade` by default; out of memory falls back to `512`), `MONSTER_AI_FACES`, `MONSTER_AI_TEXTURE`, and `MONSTER_AI_YAW_DEG` if the AI monster faces away from the camera.
+Tuning (gaming PC `.env`): `MONSTER_IMAGINE_PROMPT` (the film-style prompt; default in `gpu/monster_gpu/imagine.py`), `MONSTER_IMAGINE_SEED` (another seed, another take), `MONSTER_TRELLIS_PIPELINE` (`1024_cascade` by default; out of memory falls back to `512`), `MONSTER_AI_FACES`, `MONSTER_AI_TEXTURE`, and `MONSTER_AI_YAW_DEG` if the AI monster faces away from the camera.
 
 ## Deploy
 

@@ -34,7 +34,7 @@ def load_settings() -> Settings:
         server=server.rstrip("/") + "/",
         token=token,
         worker_id=os.environ.get("MONSTER_WORKER_ID") or f"gpu@{socket.gethostname()}",
-        steps=_list(os.environ.get("MONSTER_GPU_STEPS", "ai3d")),
+        steps=_list(os.environ.get("MONSTER_GPU_STEPS", "imagine,ai3d")),
         poll_seconds=float(os.environ.get("MONSTER_POLL_SECONDS", "30")),
         max_other_vram_mb=int(os.environ.get("MONSTER_MAX_OTHER_VRAM_MB", "2048")),
         # Steam games live under steamapps/common; Proton/Wine games show up as wine processes.

@@ -54,7 +54,7 @@ Kid → Creature (one per drawing) → Jobs (pipeline steps) → Artifacts (file
 - Kid: id, name, avatar colour
 - Creature: id, kid_id, name, created_at, chosen_style, eyes, rotation (quarter turns applied to the cutout, for drawings made sideways)
 - Job: id, creature_id, step, status (`queued`, `running`, `done`, `failed`, `waiting_for_gpu`), worker (`cpu`/`gpu`), attempts, error, lease
-- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, `creature`, `mesh_faithful`, `mesh_ai`, `print_3mf`, later `rig`, `anim`), path
+- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, `creature`, `mesh_faithful`, `imagined`, `mesh_ai`, `print_3mf`, later `rig`, `anim`), path
 - Worker (remote GPU workers' check-ins): id, kind, state, detail, last_seen
 
 Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = that folder + the SQLite file.
@@ -75,7 +75,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 
 - [x] Faithful balloon 3D on the CPU: `balloon` step after `cleanup` → `faithful.glb` (artifact `mesh_faithful`); 3D badge on the hill opens a spinning `<model-viewer>` with AR (`Puff.svelte`, model-viewer bundled and lazy-loaded). Steps chain through `NEXT_STEPS` in `server/monster/steps/__init__.py`; the worker backfills missing follow-up steps for older creatures at start.
 - [~] GPU worker on the gaming PC (pull-based, game check) — branch `phase2-gpu-trellis`, not yet run on the PC. Server: `/worker/*` endpoints behind `MONSTER_WORKER_TOKEN`, GPU jobs wait as `waiting_for_gpu` (counts as settled for the tablet), `/gpu` status for parent mode. Worker: `gpu/monster_gpu` (hours / Steam-Proton process / VRAM gate, one child process per job, placeholder step), image `gpu/Dockerfile` built by `.github/workflows/gpu.yml`, `compose.gpu.yaml` with `pid: host`. **Never a daemon:** the GPU worker is started by hand in the foreground with its log open (`restart: "no"`, no `-d`, nothing at boot).
-- [~] AI 3D (TRELLIS.2) beside the faithful one; kid picks — `ai3d` step after `balloon` → `ai.glb` (artifact `mesh_ai`) from `puffy.png` (artifact `puffy`, written by the balloon step: the drawing shaded with the balloon's heights, because TRELLIS made a flat card from the flat drawing; falls back to `creature.png`, the creature alone with its mask as alpha). On the 3D screen the other version spins in a bubble; tapping it swaps and sets `chosen_style`. Untested on a GPU: check 16 GB fits `1024_cascade`, orientation (`MONSTER_AI_YAW_DEG`), GLB size under nginx's 25 MB.
+- [~] AI 3D beside the faithful one; kid picks — two GPU steps after `cleanup`: `imagine` (`gpu/monster_gpu/imagine.py`) redraws `creature.png` as an animated-film character with FLUX.2 [klein] 4B (Apache 2.0) and cuts it out with BiRefNet (MIT) → `imagined.png` (artifact `imagined`); then `ai3d` (TRELLIS.2) → `ai.glb` (artifact `mesh_ai`). TRELLIS copies its input, so from the drawing (or the old balloon-shaded `puffy.png`) it only made a puffed-up drawing without character. On the 3D screen the other version spins in a bubble; tapping it swaps and sets `chosen_style`. Untested on a GPU: the film prompt on the fixtures, VRAM of both steps, check 16 GB fits `1024_cascade`, orientation (`MONSTER_AI_YAW_DEG`), GLB size under nginx's 25 MB. diffusers stays at 0.38 (later ones need huggingface-hub 1.x, which TRELLIS's transformers 4 refuses).
 
 ## Phase 3 — Print
 

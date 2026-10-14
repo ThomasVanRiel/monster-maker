@@ -16,7 +16,7 @@ services:
     # of /proc/*/cmdline; nothing else on the host is touched.
     pid: host
     volumes:
-      - ${CACHE_DIR:-./cache}:/cache   # model weights (~16 GB) and compile caches; owned by PUID
+      - ${CACHE_DIR:-./cache}:/cache   # model weights (~35 GB) and compile caches; owned by PUID
     # SIGTERM: the running job is stopped and handed back to the server
     stop_grace_period: 40s
     deploy:

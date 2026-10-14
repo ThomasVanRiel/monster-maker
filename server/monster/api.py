@@ -27,7 +27,7 @@ from .steps import GPU_STEPS, NEXT_STEPS
 # may wait for days, and the tablet shows that as sleeping, not as busy.
 SETTLED = {"done", "failed", "waiting_for_gpu"}
 # Turned with the drawing; the AI model is thrown away and made again from the turned drawing.
-ROTATED_KINDS = ("cutout", "mask", "creature", "puffy")
+ROTATED_KINDS = ("cutout", "mask", "creature")
 
 
 class KidIn(BaseModel):
@@ -243,8 +243,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                          (body.turns, json.dumps(eyes), creature_id))
             for kind, path in paths.items():
                 jobs.add_artifact(conn, creature_id, None, kind, f"{creature_id}/{path.name}")
-            # the AI model of the sideways drawing would stay until the gaming PC is on again
-            conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind = 'mesh_ai'", (creature_id,))
+            # the AI version of the sideways drawing would stay until the gaming PC is on again
+            conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind IN ('imagined', 'mesh_ai')",
+                         (creature_id,))
             queued = {r["step"] for r in conn.execute(
                 "SELECT step FROM jobs WHERE creature_id = ? AND status IN ('queued', 'waiting_for_gpu')",
                 (creature_id,))}
@@ -381,6 +382,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 name = spec.outputs[kind]
                 if name.endswith(".glb") and data[:4] != b"glTF":
                     raise HTTPException(415, f"{kind} is not a GLB file")
+                if name.endswith(".png") and data[:8] != b"\x89PNG\r\n\x1a\n":
+                    raise HTTPException(415, f"{kind} is not a PNG file")
                 tmp = folder / f".{name}.upload"
                 tmp.write_bytes(data)
                 tmps.append((tmp, folder / name))

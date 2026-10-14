@@ -1,5 +1,6 @@
-"""Stand-in for the AI 3D step: the drawing on a thin standing card, 20 cm tall. No model, no GPU,
-standard library only. Lets the parent test the GPU round trip before TRELLIS is set up."""
+"""Stand-ins for the GPU steps, no model, no GPU, standard library only: imagine passes the drawing
+on as it is, ai3d puts it on a thin standing card, 20 cm tall. Lets the parent test the GPU round
+trip before FLUX.2 and TRELLIS are set up."""
 
 import json
 import struct
@@ -7,6 +8,13 @@ from pathlib import Path
 
 HEIGHT_M = 0.20
 THICK_M = 0.004
+
+
+def imagine(inputs: dict[str, Path], out: Path) -> dict[str, str]:
+    png = inputs["image"].read_bytes()
+    png_size(png)
+    (out / "imagined.png").write_bytes(png)
+    return {"imagined": "imagined.png"}
 
 
 def run(inputs: dict[str, Path], out: Path) -> dict[str, str]:

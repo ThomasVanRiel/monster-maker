@@ -1,6 +1,8 @@
-# GPU worker for the gaming PC (RTX 4070 Ti Super): TRELLIS.2 plus the pull loop.
+# GPU worker for the gaming PC (RTX 4070 Ti Super): FLUX.2 [klein] and TRELLIS.2 plus the pull loop.
 # Built in CI (.github/workflows/gpu.yml), never on the PC. Model weights are not in the image:
 # they download once into the /cache volume (Hugging Face; DINOv3 needs HF_TOKEN, see .env.example).
+# diffusers stays at 0.38: later releases need huggingface-hub 1.x, which transformers 4 (TRELLIS's
+# pin) refuses.
 #
 # Versions follow TRELLIS.2's setup.sh: Python 3.10, CUDA 12.4, torch 2.6.0, flash-attn 2.7.3.
 # The CUDA extensions compile for TORCH_CUDA_ARCH_LIST only (8.9 = Ada, the 4070 Ti Super):
@@ -44,6 +46,8 @@ RUN git clone https://github.com/microsoft/TRELLIS.2.git /opt/trellis2 && git -C
     && git -C /opt/trellis2 submodule update --init --recursive \
     && pip install /opt/trellis2/o-voxel --no-build-isolation --no-deps \
     && rm -rf /opt/trellis2/.git /opt/trellis2/assets
+# FLUX.2 [klein] (imagine step) and BiRefNet's remote code; last, so the CUDA builds above stay cached
+RUN pip install diffusers==0.38.0 "accelerate>=1.0,<2" einops
 
 # --- runtime -----------------------------------------------------------------------------------
 FROM nvidia/cuda:${CUDA}-runtime-ubuntu22.04
@@ -56,7 +60,7 @@ COPY --from=build /venv /venv
 COPY --from=build /opt/trellis2 /opt/trellis2
 
 # Everything that downloads or caches goes to the /cache volume, so the container can run as the
-# PC's user and the 16 GB of weights survive image updates.
+# PC's user and the ~35 GB of weights survive image updates.
 ENV PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONPATH=/opt/trellis2:/app \
     HOME=/cache HF_HOME=/cache/huggingface HF_HUB_DISABLE_TELEMETRY=1 \
     TRITON_CACHE_DIR=/cache/triton FLEX_GEMM_AUTOTUNE_CACHE_PATH=/cache/flex_gemm/autotune_cache.json \

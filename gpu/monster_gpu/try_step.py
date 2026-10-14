@@ -1,9 +1,10 @@
-"""Run one GPU step on a local picture, without the server: for trying TRELLIS out on the PC.
+"""Run one GPU step on a local picture, without the server: for trying the models out on the PC.
 
-    python -m monster_gpu.try_step ai3d path/to/creature.png [out dir]
+    python -m monster_gpu.try_step imagine path/to/creature.png [out dir]
+    python -m monster_gpu.try_step ai3d out-dir/imagined.png [out dir]
 
 In the dev stack: docker compose -f compose.dev.yaml --profile gpu run --rm gpu-worker \\
-    python -m monster_gpu.try_step ai3d /data/creatures/1/creature.png /data/try
+    python -m monster_gpu.try_step imagine /data/creatures/1/creature.png /data/try
 Runs in this process (no child, no game check) and prints how long it took and the peak VRAM.
 """
 

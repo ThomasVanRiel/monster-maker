@@ -1,11 +1,12 @@
-"""image -> ai.glb (artifact mesh_ai): TRELLIS.2 (MIT, microsoft/TRELLIS.2-4B) imagines the drawing
-as a 3D creature. Shown beside the faithful balloon, never instead of it; the kid picks.
+"""imagined.png -> ai.glb (artifact mesh_ai): TRELLIS.2 (MIT, microsoft/TRELLIS.2-4B) turns the
+drawing reimagined as an animated-film character (step imagine, imagine.py) into a 3D model.
+Shown beside the faithful balloon, never instead of it; the kid picks.
 
 Runs in a child process per job (run_step.py), so everything here is loaded and freed per job.
 
-- Input is creature.png: the creature alone with its mask as alpha. TRELLIS uses an image's alpha
-  as is, so its own background remover (BRIA RMBG-2.0: gated, non-commercial licence) is never
-  needed and is not even downloaded.
+- The input comes cut out (BiRefNet, in the imagine step). TRELLIS uses an image's alpha as is, so
+  its own background remover (BRIA RMBG-2.0: gated, non-commercial licence) is never needed and is
+  not even downloaded.
 - 16 GB VRAM: TRELLIS.2 is tested on 24 GB+. Its low-VRAM mode (on by default) keeps the models
   in RAM and moves each to the GPU only while it runs: slower, but small. With it off
   (MONSTER_TRELLIS_LOW_VRAM=0) everything stays on the GPU. Running out of memory retries with
@@ -75,7 +76,7 @@ class _NoBackgroundRemoval:
     cuda = cpu = to
 
     def __call__(self, image):
-        raise RuntimeError("input image has no alpha; expected creature.png or cutout.png")
+        raise RuntimeError("input image has no alpha; expected imagined.png")
 
 
 def load_pipeline(low_vram: bool):

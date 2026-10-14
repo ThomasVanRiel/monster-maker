@@ -1,7 +1,4 @@
 """cutout.png -> faithful.glb (artifact mesh_faithful): the "faithful" 3D creature, the sticker puffed up like a balloon.
-Also creature.png -> puffy.png (artifact puffy): the drawing shaded with the same heights, as if lit
-from the top left. TRELLIS (the AI 3D step) reads shading as shape; given the flat drawing it
-makes a flat card.
 
 The shape is the sticker's opaque area, the drawing is its texture on the front and (mirrored,
 as if seen through the paper) on the back. Nothing is invented.
@@ -36,34 +33,7 @@ def run(folder: Path) -> dict[str, str]:
     if sticker is None or sticker.ndim != 3 or sticker.shape[2] != 4:
         raise ValueError("cutout.png is missing or has no alpha")
     (folder / "faithful.glb").write_bytes(balloon_glb(sticker))
-    produced = {"mesh_faithful": "faithful.glb"}
-    creature = cv2.imread(str(folder / "creature.png"), cv2.IMREAD_UNCHANGED)
-    if creature is None or creature.ndim != 3 or creature.shape[2] != 4:
-        creature = sticker  # made before creature.png existed: shade the sticker, edge and all
-    cv2.imwrite(str(folder / "puffy.png"), puffy(creature))
-    produced["puffy"] = "puffy.png"
-    return produced
-
-
-LIGHT = np.array([-0.45, -0.55, 0.7]) / np.linalg.norm([-0.45, -0.55, 0.7])  # top left, towards us
-
-
-def puffy(creature: np.ndarray, puff: float = PUFF) -> np.ndarray:
-    """The creature (BGRA, alpha = mask) shaded like a balloon: soft light from the top left,
-    darker towards the outline, a small highlight. Colours and lines stay the drawing's. BGRA."""
-    mask = keep_largest((creature[..., 3] >= 128).astype(np.uint8))
-    h = cv2.GaussianBlur(inflate(mask) * puff, (0, 0), 1.5)
-    gy, gx = np.gradient(h)
-    n = np.dstack([-gx, -gy, np.ones_like(h)])
-    n /= np.linalg.norm(n, axis=2, keepdims=True)
-    half = LIGHT + [0, 0, 1]
-    half /= np.linalg.norm(half)
-    diffuse = np.clip(n @ LIGHT, 0, 1)
-    shine = np.clip(n @ half, 0, 1) ** 40
-    rgb = creature[..., :3].astype(np.float32) / 255 * (0.35 + 0.75 * diffuse)[..., None] + 0.35 * shine[..., None]
-    out = np.dstack([np.clip(rgb, 0, 1) * 255, mask * 255]).astype(np.uint8)
-    out[mask == 0, :3] = 255
-    return out
+    return {"mesh_faithful": "faithful.glb"}
 
 
 def balloon_glb(sticker: np.ndarray) -> bytes:

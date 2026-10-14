@@ -13,7 +13,7 @@ export type Creature = {
 	chosen_style: Style | null;
 	eyes: Eye[];
 	rotation: number;
-	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'mesh_ai' | 'print_3mf', string>>;
+	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'imagined' | 'mesh_ai' | 'print_3mf', string>>;
 	jobs: Job[];
 };
 

@@ -56,6 +56,13 @@ def backfill(conn) -> None:
             )
             if cur.rowcount:
                 log.info("backfill: queued %s for %s creatures", next_step, cur.rowcount)
+    # ai3d used to follow the balloon and now follows imagine. One still waiting without an imagined
+    # picture can't run; imagine queues it again when it is done.
+    cur = conn.execute(
+        "DELETE FROM jobs WHERE step = 'ai3d' AND status = 'waiting_for_gpu' AND creature_id NOT IN"
+        " (SELECT creature_id FROM artifacts WHERE kind = 'imagined')")
+    if cur.rowcount:
+        log.info("backfill: dropped %s ai3d jobs waiting for an imagined picture", cur.rowcount)
 
 
 def run_one(conn, settings, job, worker_id: str) -> None:
