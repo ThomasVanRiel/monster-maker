@@ -1,0 +1,53 @@
+# Dev machines: build from source, hot reload, local test data in ./data (gitignored).
+# Run: docker compose -f compose.dev.yaml up --build   then open http://localhost:8099
+# (localhost counts as a secure context, so the live camera works without TLS)
+name: monster-maker-dev
+
+x-api-build: &api-build
+  build: ./server
+  user: "${PUID:-1000}:${PGID:-1000}"
+  environment:
+    MONSTER_DATA_DIR: /data
+  volumes:
+    - ./server/monster:/app/monster
+    - ./data:/data
+
+services:
+  api:
+    <<: *api-build
+    command: ["uvicorn", "monster.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "${DEV_API_PORT:-8097}:8000"
+
+  cpu-worker:
+    <<: *api-build
+    command: ["watchfiles", "--filter", "python", "python -m monster.worker", "monster"]
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      XDG_DATA_HOME: /tmp
+      XDG_CONFIG_HOME: /tmp
+    ports:
+      - "${DEV_WEB_PORT:-8099}:8080"
+    volumes:
+      - ./web/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - frontend
+
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    # npx rather than `npm install -g`, which needs root; node_modules lives in
+    # the bind mount so nothing in the repo ends up owned by a container user.
+    command: ["sh", "-c", "npx --yes pnpm@11.28.5 install --frozen-lockfile && npx --yes pnpm@11.28.5 exec vite dev --host 0.0.0.0 --port 5173"]
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      API_TARGET: http://api:8000
+      HOME: /tmp
+    volumes:
+      - ./frontend:/app

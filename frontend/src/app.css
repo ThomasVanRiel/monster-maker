@@ -1,0 +1,226 @@
+/* Monster Hill: visual tokens and shared pieces (from prototype/index.html, see docs/kids-ui.md). */
+@import '@fontsource/fredoka/500.css';
+@import '@fontsource/fredoka/600.css';
+@import '@fontsource/fredoka/700.css';
+
+:root {
+	--sky: #cfeaf7;
+	--night: #33376e;
+	--hill: #8ccb6e;
+	--hill-deep: #74b85a;
+	--hill-night: #4e8f4a;
+	--hill-night-deep: #3f7a3c;
+	--ink: #2e2a3b;
+	--ink-soft: #5b6b7d;
+	--paper: #ffffff;
+	--mist: #eef4f8;
+	--sun: #ffd45c;
+	--moon: #fff1b8;
+	--brass: #f5b83d;
+	--wood: #b5651d;
+	--go: #ff5a3c;
+	--ok: #2f9e52;
+	--ok-deep: #1e6e38;
+	--stop: #d7372b;
+	--found: #7cf29a;
+	--display: 'Fredoka', ui-rounded, 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+	--crit: 150px;
+	color-scheme: light;
+}
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+body {
+	background: var(--sky);
+	color: var(--ink);
+	font-family: var(--display);
+	overflow: hidden;
+	-webkit-user-select: none;
+	user-select: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+button {
+	font: inherit;
+	color: inherit;
+}
+button:focus-visible,
+input:focus-visible {
+	outline: 4px solid var(--ink);
+	outline-offset: 4px;
+}
+[hidden] {
+	display: none !important;
+}
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+.screen {
+	position: fixed;
+	inset: 0;
+	overflow: hidden;
+}
+
+/* round white icon button, top-left placement */
+.round {
+	width: clamp(60px, 9vmin, 84px);
+	height: clamp(60px, 9vmin, 84px);
+	border-radius: 50%;
+	border: 0;
+	background: var(--paper);
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+	box-shadow: 0 5px 0 rgba(46, 42, 59, 0.22);
+}
+.round svg {
+	width: 48%;
+	height: 48%;
+}
+.round:active {
+	transform: translateY(3px);
+	box-shadow: 0 2px 0 rgba(46, 42, 59, 0.22);
+}
+.tl {
+	position: absolute;
+	top: calc(16px + env(safe-area-inset-top, 0px));
+	left: calc(16px + env(safe-area-inset-left, 0px));
+	z-index: 6;
+}
+
+/* scenery */
+.sun {
+	position: absolute;
+	top: 9%;
+	right: 22%;
+	width: clamp(70px, 12vmin, 120px);
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: var(--sun);
+}
+.cloud {
+	position: absolute;
+	height: clamp(36px, 6vmin, 58px);
+	border-radius: 999px;
+	background: var(--paper);
+	animation: drift 60s linear infinite;
+}
+.cloud::before {
+	content: '';
+	position: absolute;
+	left: 22%;
+	bottom: 30%;
+	width: 46%;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: inherit;
+}
+.c1 {
+	top: 15%;
+	left: 30%;
+	width: clamp(120px, 18vmin, 190px);
+}
+.c2 {
+	top: 26%;
+	left: 68%;
+	width: clamp(90px, 13vmin, 140px);
+	animation-duration: 80s;
+	animation-delay: -30s;
+}
+@keyframes drift {
+	from {
+		transform: translateX(-8vw);
+	}
+	50% {
+		transform: translateX(8vw);
+	}
+	to {
+		transform: translateX(-8vw);
+	}
+}
+.hillback,
+.hillfront {
+	position: absolute;
+	left: -15%;
+	right: -15%;
+	border-radius: 50%;
+}
+.hillback {
+	bottom: -62vh;
+	height: 112vh;
+	background: var(--hill);
+}
+.hillfront {
+	bottom: -80vh;
+	height: 110vh;
+	background: var(--hill-deep);
+}
+
+/* a creature's body: hops from its feet */
+.bod {
+	transform-origin: 50% 100%;
+	position: relative;
+}
+@keyframes hop {
+	0% {
+		transform: none;
+	}
+	30% {
+		transform: translateY(-36%) scale(0.92, 1.1);
+	}
+	58% {
+		transform: translateY(0) scale(1.14, 0.86);
+	}
+	78% {
+		transform: scale(0.96, 1.04);
+	}
+	100% {
+		transform: none;
+	}
+}
+.hop {
+	animation: hop 0.62s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+@keyframes pulse {
+	0%,
+	100% {
+		transform: scale(1) rotate(0deg);
+	}
+	50% {
+		transform: scale(1.06) rotate(-4deg);
+	}
+}
+.flash {
+	position: fixed;
+	inset: 0;
+	background: #fff;
+	opacity: 0;
+	pointer-events: none;
+	z-index: 50;
+}
+.flash.on {
+	animation: flash 0.5s ease-out;
+}
+@keyframes flash {
+	from {
+		opacity: 0.95;
+	}
+	to {
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.cloud {
+		animation: none;
+	}
+	.hop {
+		animation-duration: 0.3s;
+	}
+}

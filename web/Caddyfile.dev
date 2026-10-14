@@ -1,0 +1,19 @@
+# Dev variant of web/Caddyfile for compose.dev.yaml: same, but the frontend is the Vite dev server.
+{
+	admin off
+	auto_https off
+}
+
+# 8080, not 80: the container runs unprivileged and cannot bind a low port.
+:8080 {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	# dev: the Vite dev server (hot reload) instead of the built app
+	handle {
+		reverse_proxy frontend:5173
+	}
+}

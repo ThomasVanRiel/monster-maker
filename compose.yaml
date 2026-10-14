@@ -1,0 +1,51 @@
+# Home server. No source checkout here: images come from the registry (built by CI).
+# Update:   docker compose pull && docker compose up -d
+# Rollback: set TAG=<git sha> in .env, then the same command.
+name: monster-maker
+
+x-api-image: &api-image ${REGISTRY:?set REGISTRY in .env}/monster-maker-api:${TAG:-main}
+
+# Everything runs unprivileged as the owner of DATA_DIR, so the creature files
+# and the SQLite database stay readable (and backup-able) without sudo.
+x-user: &user "${PUID:-1000}:${PGID:-1000}"
+
+services:
+  api:
+    image: *api-image
+    user: *user
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+
+  cpu-worker:
+    image: *api-image
+    user: *user
+    restart: unless-stopped
+    command: ["python", "-m", "monster.worker"]
+    env_file: .env
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  # HTTP only, on the loopback: the host's nginx terminates TLS and proxies here.
+  caddy:
+    image: ${REGISTRY:?set REGISTRY in .env}/monster-maker-web:${TAG:-main}
+    user: *user
+    restart: unless-stopped
+    env_file: .env
+    # Unprivileged Caddy cannot write the image's /data and /config.
+    environment:
+      XDG_DATA_HOME: /tmp
+      XDG_CONFIG_HOME: /tmp
+    ports:
+      - "${WEB_HOST_BIND:-127.0.0.1}:${WEB_HOST_PORT:-8095}:8080"
+    depends_on:
+      - api

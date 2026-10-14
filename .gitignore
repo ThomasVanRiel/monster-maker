@@ -1,0 +1,35 @@
+# runtime data — kids' drawings stay out of git.
+# data/ itself is tracked (empty) so it exists before the containers start: they
+# run unprivileged, and a bind-mount target Docker has to create lands as root.
+creatures/
+data/*
+!data/.gitkeep
+*.sqlite
+*.sqlite3
+*.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# node
+node_modules/
+dist/
+build/
+.svelte-kit/
+
+# caddy
+caddy_data/
+caddy_config/
+
+.DS_Store
+
+# pnpm
+.pnpm-store/
+cutout-debug/
+
+# private, machine-local: real domain, addresses, working configs (see CLAUDE.local.md)
+CLAUDE.local.md
+*.local.conf

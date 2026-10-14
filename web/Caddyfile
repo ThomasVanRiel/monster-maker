@@ -1,0 +1,24 @@
+# Plain HTTP on the loopback. The home server's nginx terminates TLS for
+# your domain and proxies here (see deploy/nginx/monster.conf),
+# so Caddy only serves the built SPA and routes /api.
+{
+	admin off
+	auto_https off
+}
+
+# 8080, not 80: the container runs unprivileged and cannot bind a low port.
+:8080 {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		@immutable path /_app/immutable/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}
