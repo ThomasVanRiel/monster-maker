@@ -166,7 +166,22 @@ def segment(img: np.ndarray, paper: np.ndarray, debug: dict | None = None):
     ink = drop_specks(ink, max(20, round(w * h * 0.00015)))
     debug["ink_clean"] = ink * 255
 
-    return fill_outline(ink, paper, debug)
+    return keep_creature(fill_outline(ink, paper, debug))
+
+
+def keep_creature(mask: np.ndarray) -> np.ndarray:
+    """The biggest shape plus pieces close to it. Printed headers, logos and doodles elsewhere on
+    the sheet are dark ink too; a creature drawn in a few nearby parts stays whole."""
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if n <= 2:
+        return mask
+    biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    reach = max(3, round(min(mask.shape) * 0.04))
+    near = cv2.dilate((labels == biggest).astype(np.uint8), cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * reach + 1, 2 * reach + 1)))
+    keep = np.zeros(n, bool)
+    keep[np.unique(labels[(near > 0) & (labels > 0)])] = True
+    return keep[labels].astype(np.uint8)
 
 
 def fill_outline(ink: np.ndarray, paper: np.ndarray, debug: dict) -> np.ndarray:

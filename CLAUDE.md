@@ -67,7 +67,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 - [x] Jobs table with leases and server-sent progress events
 - [x] CPU worker: perspective crop, background removal, cutout and mask (`server/monster/steps/cleanup.py`)
 - [x] Instant wobble, bounce and blink of the cutout in the browser
-- [ ] Test with real drawings from the kids; note which ones fail — one fixture so far (`tests/fixtures/monster-1.jpeg`); paused to start Phase 2
+- [ ] Test with real drawings from the kids; note which ones fail — two fixtures so far (`monster-1`: shadow, outline gaps, faint strokes; `monster-2`: ruled pad, printed logos, wooden desk); both pass
 
 ## Phase 2 — 3D creatures
 
@@ -88,7 +88,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 2. Even out lighting: per-block paper brightness (90th percentile), one max-spread pass, bilinear per pixel.
 3. Ink = clearly darker than local paper, or clearly coloured; faint stretches count when they are thin (black-hat) and touch the dark ink.
 4. Drop specks below a minimum area.
-5. Close outline gaps with the smallest closing that encloses nearly as much as the widest, flood from the border, shrink back to the line.
+5. Close outline gaps with the smallest closing that encloses nearly as much as the widest, flood from the border, shrink back to the line. Keep the biggest shape plus pieces close to it: printed logos or headers elsewhere on the sheet are dropped.
 6. White-balance against the paper per channel with a mild contrast curve; add a white "sticker" edge.
 7. Fallback when nothing is found: a soft rounded window in the middle of the photo.
 

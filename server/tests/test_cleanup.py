@@ -81,3 +81,28 @@ def test_monster_1_real_photo():
     assert at(0.95, 0.42) == 1   # right hand
     assert at(0.5, 0.9) == 0     # between the legs
     assert at(0.25, 0.2) == 0    # beside the head
+
+
+def test_monster_2_lined_pad_with_printed_logos():
+    """Blue pen on a ruled pad with two printed logos in the header, on a wooden desk."""
+    cut = cleanup.cutout(cv2.imread(str(FIXTURES / "monster-2.jpeg")))
+    m = cut.mask
+    assert cut.found
+    n, _, _, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    assert n == 2  # just the zebra: the logos are dropped, the ruled lines never count as ink
+    ys, xs = np.nonzero(m)
+    x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+    assert y0 > 0.2 * m.shape[0]  # nothing from the header
+    at = lambda fx, fy: m[int(y0 + fy * (y1 - y0)), int(x0 + fx * (x1 - x0))]
+    assert at(0.55, 0.55) == 1   # belly, between the stripes
+    assert at(0.8, 0.12) == 1    # head
+    assert at(0.95, 0.6) == 0    # beside the mane
+
+
+def test_keep_creature_drops_far_pieces_and_keeps_near_ones():
+    m = np.zeros((400, 400), np.uint8)
+    cv2.circle(m, (200, 250), 80, 1, -1)       # the creature
+    cv2.circle(m, (300, 250), 12, 1, -1)       # a hand drawn just beside it
+    cv2.rectangle(m, (20, 20), (120, 40), 1, -1)  # a printed logo in the corner
+    kept = cleanup.keep_creature(m)
+    assert kept[250, 200] == 1 and kept[250, 300] == 1 and kept[30, 70] == 0
