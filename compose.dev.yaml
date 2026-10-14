@@ -66,7 +66,8 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     pid: host  # see the host's processes, for the game check
     environment:
-      MONSTER_SERVER: http://api:8000
+      # the dev API by default; set MONSTER_SERVER in .env to work for the real home server
+      MONSTER_SERVER: ${MONSTER_SERVER:-http://api:8000}
       MONSTER_WORKER_TOKEN: ${MONSTER_WORKER_TOKEN:-dev}
       MONSTER_POLL_SECONDS: ${MONSTER_POLL_SECONDS:-5}
       MONSTER_GPU_PLACEHOLDER: ${MONSTER_GPU_PLACEHOLDER:-}
