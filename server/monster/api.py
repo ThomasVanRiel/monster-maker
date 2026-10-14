@@ -27,7 +27,7 @@ from .steps import GPU_STEPS, NEXT_STEPS
 # may wait for days, and the tablet shows that as sleeping, not as busy.
 SETTLED = {"done", "failed", "waiting_for_gpu"}
 # Turned with the drawing; the AI model is thrown away and made again from the turned drawing.
-ROTATED_KINDS = ("cutout", "mask", "creature")
+ROTATED_KINDS = ("cutout", "mask", "creature", "puffy")
 
 
 class KidIn(BaseModel):

@@ -121,7 +121,10 @@ def complete(conn: sqlite3.Connection, job: sqlite3.Row, worker_id: str, produce
             conn.execute("ROLLBACK")
             return False
         for step_name, kind in next_steps:
-            enqueue(conn, job["creature_id"], step_name, kind)
+            if not conn.execute(  # already waiting (e.g. turned twice quickly): once is enough
+                    "SELECT 1 FROM jobs WHERE creature_id = ? AND step = ? AND status IN ('queued', 'waiting_for_gpu')",
+                    (job["creature_id"], step_name)).fetchone():
+                enqueue(conn, job["creature_id"], step_name, kind)
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")

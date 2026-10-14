@@ -65,5 +65,16 @@ def test_glb_is_valid_binary_gltf_with_the_drawing_as_texture():
 
 def test_run_writes_balloon_glb(tmp_path):
     cv2.imwrite(str(tmp_path / "cutout.png"), sticker())
-    assert balloon.run(tmp_path) == {"mesh_faithful": "faithful.glb"}
+    assert balloon.run(tmp_path) == {"mesh_faithful": "faithful.glb", "puffy": "puffy.png"}  # no creature.png: from the sticker
     assert (tmp_path / "faithful.glb").read_bytes()[:4] == b"glTF"
+
+
+def test_puffy_is_the_drawing_shaded_like_a_balloon():
+    creature = np.zeros((120, 120, 4), np.uint8)
+    cv2.circle(creature, (60, 60), 50, (255, 255, 255, 255), -1)
+    out = balloon.puffy(creature)
+    assert out.shape == creature.shape and np.array_equal(out[..., 3], creature[..., 3])
+    lit, shadow, middle = out[30, 30, 0], out[90, 90, 0], out[60, 60, 0]
+    assert lit > shadow + 60  # light from the top left
+    assert middle > 200       # the paper stays light where it faces us
+    assert out[0, 0, :3].min() == 255

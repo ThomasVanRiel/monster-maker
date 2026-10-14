@@ -89,7 +89,12 @@ def test_rotate_drops_the_ai_model_and_waits_for_a_new_one(client, settings, tmp
     gpu_worker(client, tmp_path).tick()
     c = client.post(f"/creatures/{cid}/rotate", json={}).json()
     assert "mesh_ai" not in c["files"]
-    c = client.post(f"/creatures/{cid}/rotate", json={}).json()
+    client.post(f"/creatures/{cid}/rotate", json={})
+    conn = db.connect(settings.db_path)
+    while (job := jobs.claim(conn, "cpu", "test", 60, 3)) is not None:  # balloon (twice), print
+        worker.run_one(conn, settings, job, "test")
+    conn.close()
+    c = client.get(f"/creatures/{cid}").json()
     waiting = [j["step"] for j in c["jobs"] if j["status"] == "waiting_for_gpu"]
     assert waiting == ["ai3d"]  # once, however often it was turned
 
@@ -138,7 +143,7 @@ def test_done_upload_is_checked(client, settings):
     cid = cleaned_creature(client, settings)
     job = client.post("/worker/claim", json={"worker_id": "w"}, headers=AUTH).json()
     assert job["inputs"] == {"image": job["inputs"]["image"]}
-    assert job["inputs"]["image"].startswith(f"creatures/{cid}/files/creature?v=")
+    assert job["inputs"]["image"].startswith(f"creatures/{cid}/files/puffy?v=")
     done = f"/worker/jobs/{job['id']}/done"
     assert client.post(done, data={"worker_id": "other"}, files={"mesh_ai": ("a.glb", b"glTF....")},
                        headers=AUTH).status_code == 409
@@ -157,7 +162,7 @@ def test_done_upload_is_checked(client, settings):
 def test_job_without_inputs_is_failed_and_skipped(client, settings):
     cid = cleaned_creature(client, settings)
     conn = db.connect(settings.db_path)
-    conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind IN ('creature', 'cutout')", (cid,))
+    conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind IN ('puffy', 'creature', 'cutout')", (cid,))
     conn.close()
     assert client.post("/worker/claim", json={"worker_id": "w"}, headers=AUTH).status_code == 204
     job = client.get(f"/creatures/{cid}").json()["jobs"][-1]

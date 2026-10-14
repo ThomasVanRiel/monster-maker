@@ -23,12 +23,13 @@ class GpuStep:
 
 
 GPU_STEPS: dict[str, GpuStep] = {
-    # AI 3D (TRELLIS.2) beside the faithful balloon. creature.png has no sticker edge; creatures
-    # made before it existed fall back to the sticker.
-    "ai3d": GpuStep(inputs={"image": ("creature", "cutout")}, outputs={"mesh_ai": "ai.glb"}),
+    # AI 3D (TRELLIS.2) beside the faithful balloon, from the shaded drawing (puffy.png, made by
+    # the balloon step); older creatures fall back to the flat creature.png, then the sticker.
+    "ai3d": GpuStep(inputs={"image": ("puffy", "creature", "cutout")}, outputs={"mesh_ai": "ai.glb"}),
 }
 
-# Steps queued when a step finishes: (step, worker kind).
+# Steps queued when a step finishes: (step, worker kind). ai3d waits for the balloon's puffy.png.
 NEXT_STEPS: dict[str, list[tuple[str, str]]] = {
-    "cleanup": [("balloon", "cpu"), ("print_prep", "cpu"), ("ai3d", "gpu")],
+    "cleanup": [("balloon", "cpu"), ("print_prep", "cpu")],
+    "balloon": [("ai3d", "gpu")],
 }
