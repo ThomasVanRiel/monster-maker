@@ -9,7 +9,7 @@ from monster.steps import cleanup
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures"
 
 
-def photo(outline=True, gap=0, shadow=False, tilt=0.0) -> np.ndarray:
+def photo(outline=True, gap=0, shadow=False, tilt=0.0, ruled=False) -> np.ndarray:
     """A grey table with a slightly warm sheet of paper and an ellipse 'monster' drawn on it."""
     h, w = 1200, 900
     img = np.full((h, w, 3), (70, 90, 110), np.uint8)  # brownish table
@@ -17,6 +17,9 @@ def photo(outline=True, gap=0, shadow=False, tilt=0.0) -> np.ndarray:
     corners = np.array([[120, 100], [780, 100 + tilt * 660], [780, 1100], [120, 1100 - tilt * 660]], np.int32)
     cv2.fillConvexPoly(sheet, corners, 1)
     img[sheet > 0] = (215, 222, 230)
+    if ruled:  # light blue lines every 30 px across the sheet, as on a school pad
+        for y in range(130, 1100, 30):
+            cv2.line(img, (120, y), (780, y), (225, 185, 160), 2)
     if outline:
         cv2.ellipse(img, (450, 600), (180, 260), 0, 0, 360, (90, 80, 80), 7)
         if gap:  # a gap in the outline on the right-hand side
@@ -44,6 +47,18 @@ def test_ellipse_is_cut_out_filled(kwargs):
     assert 0.17 < cut.mask.mean() < 0.30
 
 
+def test_ruled_pad_lines_are_paper_not_ink():
+    cut = cleanup.cutout(photo(ruled=True))
+    assert cut.found
+    inside, outside = centre_and_outside(cut.mask)
+    assert inside == 1 and outside == 0
+    assert 0.17 < cut.mask.mean() < 0.30
+    s = cut.sticker
+    h, w = s.shape[:2]
+    assert s[h // 2 - 40:h // 2 + 40, w // 2, :3].min() > 240  # no blue lines across the belly
+    assert s[..., :3][s[..., 3] == 255].min() < 140  # the outline is still there
+
+
 def test_blank_sheet_falls_back_to_window():
     cut = cleanup.cutout(photo(outline=False))
     assert not cut.found
@@ -66,6 +81,12 @@ def test_run_writes_cutout_and_mask(tmp_path):
     assert set(np.unique(cv2.imread(str(tmp_path / "mask.png"), cv2.IMREAD_GRAYSCALE))) == {0, 255}
 
 
+def lines_through(cut) -> int:
+    """How many printed lines of the pad were found running through the creature."""
+    rows = np.nonzero(((cut.debug["rules"] > 0) & (cut.mask > 0)).sum(axis=1) > 10)[0]
+    return 0 if len(rows) == 0 else 1 + int((np.diff(rows) > 2).sum())
+
+
 def test_monster_1_real_photo():
     """Thin grey pen, shadow over the left half, gap at the left armpit, faint stroke on the head."""
     cut = cleanup.cutout(cv2.imread(str(FIXTURES / "monster-1.jpeg")))
@@ -81,6 +102,7 @@ def test_monster_1_real_photo():
     assert at(0.95, 0.42) == 1   # right hand
     assert at(0.5, 0.9) == 0     # between the legs
     assert at(0.25, 0.2) == 0    # beside the head
+    assert not (cut.debug["rules"] & m).any()  # plain paper: no pen stroke taken for a ruled line
 
 
 def test_monster_2_lined_pad_with_printed_logos():
@@ -97,6 +119,7 @@ def test_monster_2_lined_pad_with_printed_logos():
     assert at(0.55, 0.55) == 1   # belly, between the stripes
     assert at(0.8, 0.12) == 1    # head
     assert at(0.95, 0.6) == 0    # beside the mane
+    assert lines_through(cut) >= 8  # the ruled lines across the zebra are found (and whitened)
 
 
 def test_keep_creature_drops_far_pieces_and_keeps_near_ones():
