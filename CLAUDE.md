@@ -18,7 +18,7 @@ More detail: `docs/plan.md` (architecture, pipeline, data model, GPU worker, ris
 | Machine | Role |
 | --- | --- |
 | Home server (always on) — Ryzen 5 5500GT, 16 GB RAM, Linux, no GPU | nginx (TLS, shared with other household services), Caddy (SPA + `/api`, HTTP on `127.0.0.1:8095`), FastAPI, SQLite, creature files, job queue, CPU worker |
-| Gaming PC (only when idle) — Linux, RTX 4070 Ti Super 16 GB | GPU worker that **pulls** heavy AI jobs from the server; skips when a game is running. Not needed in Phase 1. |
+| Gaming PC (only when idle) — Linux, RTX 4070 Ti Super 16 GB | GPU worker that **pulls** heavy AI jobs from the server over HTTPS (through the server's nginx); skips when a game is running. Optional: everything else works with it off. |
 | Tablet | Browser / PWA at the home server's HTTPS name (LAN-only, real certificate; the real name and addresses are in `CLAUDE.local.md`, which is gitignored). Camera needs HTTPS. |
 
 ## Development and deployment
@@ -54,7 +54,8 @@ Kid → Creature (one per drawing) → Jobs (pipeline steps) → Artifacts (file
 - Kid: id, name, avatar colour
 - Creature: id, kid_id, name, created_at, chosen_style, eyes, rotation (quarter turns applied to the cutout, for drawings made sideways)
 - Job: id, creature_id, step, status (`queued`, `running`, `done`, `failed`, `waiting_for_gpu`), worker (`cpu`/`gpu`), attempts, error, lease
-- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, later `mesh_faithful`, `mesh_ai`, `rig`, `anim`, `print_3mf`), path
+- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, `creature`, `mesh_faithful`, `mesh_ai`, `print_3mf`, later `rig`, `anim`), path
+- Worker (remote GPU workers' check-ins): id, kind, state, detail, last_seen
 
 Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = that folder + the SQLite file.
 
@@ -73,8 +74,8 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 ## Phase 2 — 3D creatures
 
 - [x] Faithful balloon 3D on the CPU: `balloon` step after `cleanup` → `faithful.glb` (artifact `mesh_faithful`); 3D badge on the hill opens a spinning `<model-viewer>` with AR (`Puff.svelte`, model-viewer bundled and lazy-loaded). Steps chain through `NEXT_STEPS` in `server/monster/steps/__init__.py`; the worker backfills missing follow-up steps for older creatures at start.
-- [ ] GPU worker on the gaming PC (pull-based, game check)
-- [ ] AI 3D (TRELLIS.2) beside the faithful one; kid picks
+- [~] GPU worker on the gaming PC (pull-based, game check) — branch `phase2-gpu-trellis`, not yet run on the PC. Server: `/worker/*` endpoints behind `MONSTER_WORKER_TOKEN`, GPU jobs wait as `waiting_for_gpu` (counts as settled for the tablet), `/gpu` status for parent mode. Worker: `gpu/monster_gpu` (hours / Steam-Proton process / VRAM gate, one child process per job, placeholder step), image `gpu/Dockerfile` built by `.github/workflows/gpu.yml`, `compose.gpu.yaml` with `pid: host`. **Never a daemon:** the GPU worker is started by hand in the foreground with its log open (`restart: "no"`, no `-d`, nothing at boot).
+- [~] AI 3D (TRELLIS.2) beside the faithful one; kid picks — `ai3d` step after `cleanup` → `ai.glb` (artifact `mesh_ai`) from `creature.png` (creature alone, mask as alpha). On the 3D screen the other version spins in a bubble; tapping it swaps and sets `chosen_style`. Untested on a GPU: check 16 GB fits `1024_cascade`, orientation (`MONSTER_AI_YAW_DEG`), GLB size under nginx's 25 MB.
 
 ## Phase 3 — Print
 

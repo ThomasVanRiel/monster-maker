@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Home screen: the current kid's creatures on a sideways-scrolling hill, kid avatars,
 	// the parent lock (press and hold) and the magic glass that opens the camera.
-	import type { Creature, Kid } from '../api';
+	import { getGpu, type Creature, type GpuStatus, type Kid } from '../api';
 	import { replay, type Critter } from '../critter';
 	import { prefs } from '../prefs.svelte';
 	import { sfx } from '../sfx';
@@ -66,6 +66,32 @@
 	$effect(() => {
 		if (hopId != null && bods[hopId]) replay(bods[hopId]);
 	});
+
+	// parent mode: how the gaming PC is doing (it makes the AI 3D versions)
+	let gpu = $state<GpuStatus | null>(null);
+	$effect(() => {
+		if (!parent) return;
+		const load = () => getGpu().then((g) => (gpu = g), () => (gpu = null));
+		load();
+		const t = setInterval(load, 10000);
+		return () => clearInterval(t);
+	});
+	const GPU_STATES: Record<string, string> = {
+		ready: 'ready',
+		working: 'working',
+		gaming: 'paused, someone is gaming',
+		gpu_busy: 'paused, GPU in use',
+		quiet_hours: 'off hours',
+		no_gpu: 'no GPU found'
+	};
+	function gpuText(g: GpuStatus): string {
+		if (!g.enabled) return 'AI 3D off';
+		const w = g.workers[0];
+		const away = !w || g.now - w.last_seen > 180; // it checks in every 30 s
+		const state = away ? 'PC off' : `PC ${GPU_STATES[w.state] ?? w.state}`;
+		const queue = g.waiting + g.running;
+		return queue ? `${state} · ${queue} waiting` : state;
+	}
 
 	// parent lock: press and hold 1.2 s to enter, tap to leave
 	let holding = $state(false);
@@ -144,6 +170,11 @@
 								onpuff(cr.id);
 							}}
 						>
+							{#if cr.files.mesh_ai}
+								<svg class="sparkle" viewBox="0 0 24 24" aria-hidden="true"
+									><path d="M12 1 L14.6 9.4 L23 12 L14.6 14.6 L12 23 L9.4 14.6 L1 12 L9.4 9.4 Z" /></svg
+								>
+							{/if}
 							<svg viewBox="0 0 48 48" fill="none" stroke="#2E2A3B" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"
 								><ellipse cx="24" cy="24" rx="10" ry="13" fill="#fff" /><path d="M6 20 Q4 30 16 34" /><path
 									d="M42 28 Q44 18 32 14"
@@ -230,6 +261,7 @@
 			<div class="parentbar">
 				<strong>Parent mode</strong>
 				<button class="pbtn" type="button" onclick={onaddphoto}>Add from photos</button>
+				{#if gpu}<span class="gpu" title={gpu.workers[0]?.detail ?? ''}>{gpuText(gpu)}</span>{/if}
 				<button
 					class="pbtn"
 					type="button"
@@ -538,6 +570,21 @@
 	}
 	.puff svg {
 		width: 78%;
+	}
+	.puff .sparkle {
+		position: absolute;
+		top: -12px;
+		right: -12px;
+		width: 30px;
+		fill: var(--paper);
+		stroke: var(--ink);
+		stroke-width: 2.2;
+		stroke-linejoin: round;
+	}
+	.gpu {
+		padding: 0 8px;
+		color: var(--ink-soft);
+		font-weight: 600;
 	}
 	.print {
 		display: none;

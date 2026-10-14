@@ -85,7 +85,7 @@ The gaming PC never serves anything; it borrows work from the home server only w
 3. **Quiet hours as a backup.** A configurable window, e.g. only run 08:00–18:00 on weekdays.
 4. **One model at a time.** Each model loads, runs, and frees the GPU. This keeps peak use within the 16 GB of the RTX 4070 Ti Super.
 5. **Resumable steps.** Each step saves its own artifact. A job that disappears gets requeued after a lease timeout (e.g. 10 minutes) and resumes from the last finished step.
-6. **Lifecycle.** A systemd service starts the worker on boot; it stops cleanly on SIGTERM and returns its job to the queue.
+6. **Lifecycle.** Never unattended: the parent starts the worker by hand in the foreground (`docker compose ... up`, no `-d`, `restart: "no"`) and watches its log. Ctrl+C (SIGTERM) stops it cleanly and returns its job to the queue; jobs wait until the next session.
 7. **Optional wake-on-LAN.** A parent-mode button on the server wakes the PC when jobs are waiting.
 
 The tablet shows waiting GPU jobs as a friendly status ("your monster is sleeping") rather than an error.
@@ -132,6 +132,12 @@ Phase 1 delivers the "it's alive!" moment with the least machinery; each later p
 ### Phase 2, first step: faithful balloon 3D (done)
 
 `balloon` CPU step after `cleanup`: the sticker's shape inflated (Poisson, then square root: a disc becomes a flattened hemisphere), drawing as texture front and back, closed mesh, about 20 cm tall → `faithful.glb` (artifact `mesh_faithful`). On the tablet: a yellow 3D badge on the hill opens a spinning view with AR, via a bundled `<model-viewer>`. Next: the GPU worker and TRELLIS.2 for the AI version beside it.
+
+### Phase 2, second step: GPU worker and TRELLIS.2 (built, not yet run on the PC)
+
+Branch `phase2-gpu-trellis`. The `ai3d` GPU step after `cleanup` turns `creature.png` (the creature alone, its mask as alpha, so TRELLIS's own background remover is never loaded) into `ai.glb` (artifact `mesh_ai`), scaled like the balloon. The worker pulls over HTTPS with a shared token: `POST /worker/claim`, heartbeat, `done` (multipart upload; the server picks the file names and checks the GLB), `fail`, `release`. GPU jobs wait as `waiting_for_gpu`, which the tablet treats as settled. Each job runs in a fresh process (VRAM is free afterwards; a game starting mid-job kills it and hands the job back). Game check: Steam/Proton process names via `pid: host`, plus VRAM in use by others. On the tablet the other version spins in a bubble; tapping it swaps them and sets `chosen_style`. Parent mode shows the PC's state.
+
+Open: does `1024_cascade` fit 16 GB with low-VRAM mode (falls back to `512` on out-of-memory)? Which way does the result face? DINOv3 is gated on Hugging Face (needs a token once); its licence is worldwide, with Meta Platforms Ireland as licensor in the EEA, so unlike Hunyuan3D it covers Belgium. AI versions aren't printed yet: `print_prep` still uses the balloon.
 
 ### Phase 3, first step: print prep (done)
 

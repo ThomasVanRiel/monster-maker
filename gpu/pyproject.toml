@@ -1,0 +1,21 @@
+[project]
+name = "monster-gpu"
+version = "0.1.0"
+description = "Monster Maker GPU worker for the gaming PC: pulls AI jobs from the home server"
+requires-python = ">=3.10"
+# The worker loop itself needs only httpx. The AI steps (TRELLIS.2, torch, CUDA extensions) are
+# installed by the Dockerfile, not here: CI and dev machines run the tests without a GPU.
+dependencies = ["httpx>=0.27"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["monster_gpu"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

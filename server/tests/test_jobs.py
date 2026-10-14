@@ -24,7 +24,17 @@ def test_claim_oldest_for_worker_kind(conn):
     jobs.enqueue(conn, 1, "cleanup", "cpu")
     job = jobs.claim(conn, "cpu", "w1", 60, 3)
     assert job["id"] == a and job["status"] == "running" and job["attempts"] == 1
-    assert status(conn, gpu) == "queued"
+    assert status(conn, gpu) == "waiting_for_gpu"
+
+
+def test_gpu_jobs_wait_for_the_gpu_and_go_back_there(conn):
+    j = jobs.enqueue(conn, 1, "ai3d", "gpu")
+    assert jobs.claim(conn, "cpu", "c", 60, 3) is None
+    assert jobs.claim(conn, "gpu", "g", 60, 3, steps=["other"]) is None
+    assert jobs.claim(conn, "gpu", "g", 60, 3, steps=[]) is None
+    assert jobs.claim(conn, "gpu", "g", 60, 3, steps=["ai3d"])["id"] == j
+    assert jobs.release(conn, j, "g")
+    assert status(conn, j) == "waiting_for_gpu"
 
 
 def test_running_job_is_not_claimed_twice(conn):

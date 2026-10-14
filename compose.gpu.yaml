@@ -1,0 +1,28 @@
+# Gaming PC: the GPU worker only. No source checkout here: the image comes from the registry.
+# Needs the NVIDIA driver and the NVIDIA Container Toolkit on the host (see README, "GPU worker").
+# Never a daemon: start it by hand, in the foreground, and watch its log. Ctrl+C stops it and
+# hands the running job back to the server.
+# Run:      docker compose -f compose.gpu.yaml pull && docker compose -f compose.gpu.yaml up
+# (it also pauses by itself while you game)
+name: monster-maker-gpu
+
+services:
+  gpu-worker:
+    image: ${REGISTRY:?set REGISTRY in .env}/monster-maker-gpu:${TAG:-main}
+    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: "no"                  # never on its own: not at boot, not after a crash
+    env_file: .env
+    # See the host's processes, so a running game is noticed (Steam, Proton/Wine). Read-only use
+    # of /proc/*/cmdline; nothing else on the host is touched.
+    pid: host
+    volumes:
+      - ${CACHE_DIR:-./cache}:/cache   # model weights (~16 GB) and compile caches; owned by PUID
+    # SIGTERM: the running job is stopped and handed back to the server
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

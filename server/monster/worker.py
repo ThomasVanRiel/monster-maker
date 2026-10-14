@@ -1,7 +1,7 @@
 """CPU worker: claims cpu jobs from the SQLite queue and runs them. Same image as the API.
 
 Runs on the home server next to the API and shares the data volume, so it talks to SQLite
-directly. (The GPU worker on the gaming PC will pull over HTTP instead.)
+directly. The GPU worker on the gaming PC pulls over HTTP instead (api.py, /worker/...).
 """
 
 import logging
@@ -48,11 +48,11 @@ def backfill(conn) -> None:
     for step, follow in NEXT_STEPS.items():
         for next_step, kind in follow:
             cur = conn.execute(
-                "INSERT INTO jobs (creature_id, step, worker, created_at, updated_at)"
-                " SELECT DISTINCT d.creature_id, ?, ?, ?, ? FROM jobs d"
+                "INSERT INTO jobs (creature_id, step, worker, status, created_at, updated_at)"
+                " SELECT DISTINCT d.creature_id, ?, ?, ?, ?, ? FROM jobs d"
                 " WHERE d.step = ? AND d.status = 'done' AND NOT EXISTS"
                 "  (SELECT 1 FROM jobs n WHERE n.creature_id = d.creature_id AND n.step = ?)",
-                (next_step, kind, time.time(), time.time(), step, next_step),
+                (next_step, kind, jobs.WAITING[kind], time.time(), time.time(), step, next_step),
             )
             if cur.rowcount:
                 log.info("backfill: queued %s for %s creatures", next_step, cur.rowcount)
@@ -71,24 +71,11 @@ def run_one(conn, settings, job, worker_id: str) -> None:
         log.exception("job %s failed", job["id"])
         jobs.fail(conn, job["id"], worker_id, traceback.format_exc())
         return
-    # artifacts, done and the follow-up steps in one go: a worker that lost its lease adds nothing
-    conn.execute("BEGIN IMMEDIATE")
     try:
-        for kind, filename in produced.items():
-            jobs.add_artifact(conn, job["creature_id"], job["id"], kind, f"{job['creature_id']}/{filename}")
-        if not jobs.finish(conn, job["id"], worker_id):
-            conn.execute("ROLLBACK")
+        if not jobs.complete(conn, job, worker_id, produced, NEXT_STEPS.get(job["step"], [])):
             log.warning("job %s: lease lost before finishing", job["id"])
-            return
-        for step_name, kind in NEXT_STEPS.get(job["step"], []):
-            jobs.enqueue(conn, job["creature_id"], step_name, kind)
-        conn.execute("COMMIT")
     except sqlite3.IntegrityError:
-        conn.execute("ROLLBACK")
         log.info("job %s: creature %s was deleted while it ran", job["id"], job["creature_id"])
-    except BaseException:
-        conn.execute("ROLLBACK")
-        raise
 
 
 if __name__ == "__main__":

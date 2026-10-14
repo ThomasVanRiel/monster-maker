@@ -1,0 +1,46 @@
+# The GPU worker image (TRELLIS.2 + CUDA, ~10 GB). Separate from build.yml: it takes long and is
+# only rebuilt when gpu/ changes on main, or by hand (Actions -> gpu -> Run workflow).
+# The gaming PC pulls it with `docker compose -f compose.gpu.yaml pull`.
+name: gpu
+
+on:
+  push:
+    branches: [main]
+    paths: [gpu/**, .github/workflows/gpu.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      # the CUDA devel image, torch and the compiled extensions don't fit in the runner's free space
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+      - uses: actions/checkout@v5
+      - id: reg
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: gpu
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.reg.outputs.prefix }}/monster-maker-gpu:main
+            ${{ steps.reg.outputs.prefix }}/monster-maker-gpu:${{ github.sha }}
+          # registry cache: the GitHub Actions cache (10 GB) would evict the api and web caches
+          cache-from: type=registry,ref=${{ steps.reg.outputs.prefix }}/monster-maker-gpu:buildcache
+          cache-to: type=registry,ref=${{ steps.reg.outputs.prefix }}/monster-maker-gpu:buildcache,mode=max

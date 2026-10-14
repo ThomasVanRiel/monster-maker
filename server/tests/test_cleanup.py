@@ -78,11 +78,16 @@ def test_sticker_is_white_paper_with_a_dark_line():
     assert s[..., :3][s[..., 3] == 255].min() < 140  # the outline is still there
 
 
-def test_run_writes_cutout_and_mask(tmp_path):
+def test_run_writes_cutout_mask_and_creature(tmp_path):
     cv2.imwrite(str(tmp_path / "drawing.jpg"), photo())
-    assert cleanup.run(tmp_path) == {"cutout": "cutout.png", "mask": "mask.png"}
+    assert cleanup.run(tmp_path) == {"cutout": "cutout.png", "mask": "mask.png", "creature": "creature.png"}
     assert cv2.imread(str(tmp_path / "cutout.png"), cv2.IMREAD_UNCHANGED).shape[2] == 4
-    assert set(np.unique(cv2.imread(str(tmp_path / "mask.png"), cv2.IMREAD_GRAYSCALE))) == {0, 255}
+    mask = cv2.imread(str(tmp_path / "mask.png"), cv2.IMREAD_GRAYSCALE)
+    assert set(np.unique(mask)) == {0, 255}
+    creature = cv2.imread(str(tmp_path / "creature.png"), cv2.IMREAD_UNCHANGED)
+    # the creature alone: same pixel count as the mask (no sticker edge), white where it is clear
+    assert creature.shape[2] == 4 and (creature[..., 3] == 255).sum() == (mask == 255).sum()
+    assert creature[0, 0, 3] == 0 and creature[0, 0, :3].min() == 255
 
 
 def lines_through(cut) -> int:

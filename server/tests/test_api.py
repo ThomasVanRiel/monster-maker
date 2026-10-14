@@ -71,15 +71,15 @@ def test_worker_turns_photo_into_cutout_then_balloon(client, settings):
     worker.run_one(conn, settings, jobs.claim(conn, "cpu", "test", 60, 3), "test")
     c = client.get(f"/creatures/{cid}").json()
     assert [(j["step"], j["status"]) for j in c["jobs"]] == [
-        ("cleanup", "done"), ("balloon", "queued"), ("print_prep", "queued")]
-    assert set(c["files"]) == {"photo", "cutout", "mask"}
+        ("cleanup", "done"), ("balloon", "queued"), ("print_prep", "queued"), ("ai3d", "waiting_for_gpu")]
+    assert set(c["files"]) == {"photo", "cutout", "mask", "creature"}
 
     for _ in range(2):
         worker.run_one(conn, settings, jobs.claim(conn, "cpu", "test", 60, 3), "test")
     conn.close()
     c = client.get(f"/creatures/{cid}").json()
-    assert [j["status"] for j in c["jobs"]] == ["done", "done", "done"]
-    assert set(c["files"]) == {"photo", "cutout", "mask", "mesh_faithful", "print_3mf"}
+    assert [j["status"] for j in c["jobs"]] == ["done", "done", "done", "waiting_for_gpu"]
+    assert set(c["files"]) == {"photo", "cutout", "mask", "creature", "mesh_faithful", "print_3mf"}
     assert client.get(f"/creatures/{cid}/files/print_3mf").headers["content-type"] == "model/3mf"
     glb = client.get(f"/creatures/{cid}/files/mesh_faithful")
     assert glb.headers["content-type"] == "model/gltf-binary" and glb.content[:4] == b"glTF"
@@ -136,7 +136,8 @@ def test_worker_backfills_steps_added_later(client, settings):
     worker.backfill(conn)
     worker.backfill(conn)  # only once
     steps = [r[0] for r in conn.execute("SELECT step FROM jobs WHERE creature_id = ? ORDER BY id", (cid,))]
-    assert steps == ["cleanup", "balloon", "print_prep"]
+    assert steps == ["cleanup", "balloon", "print_prep", "ai3d"]
+    assert conn.execute("SELECT status FROM jobs WHERE step = 'ai3d'").fetchone()[0] == "waiting_for_gpu"
     conn.close()
 
 
