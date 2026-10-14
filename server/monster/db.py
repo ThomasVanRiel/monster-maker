@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS artifacts (
     created_at   REAL NOT NULL,
     UNIQUE (creature_id, kind)
 );
+
+-- Remote workers (the GPU worker on the gaming PC): last check-in and why it is idle, for parent mode.
+CREATE TABLE IF NOT EXISTS workers (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    state      TEXT NOT NULL,   -- e.g. ready, working, gaming, quiet_hours
+    detail     TEXT,
+    last_seen  REAL NOT NULL
+);
 """
 
 

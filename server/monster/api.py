@@ -1,17 +1,18 @@
-"""HTTP API for the tablet (and, from Phase 2, the GPU worker). Served behind Caddy under /api."""
+"""HTTP API for the tablet and the GPU worker (/worker/...). Served behind Caddy under /api."""
 
 import asyncio
 import io
 import json
 import os
+import secrets
 import shutil
 import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 import cv2
 import numpy as np
@@ -20,9 +21,13 @@ from pydantic import BaseModel, Field
 
 from . import db, jobs
 from .config import Settings, load_settings
-from .steps import NEXT_STEPS
+from .steps import GPU_STEPS, NEXT_STEPS
 
-TERMINAL = {"done", "failed"}
+# The events stream ends once every job is here. A GPU job waiting for the gaming PC counts: it
+# may wait for days, and the tablet shows that as sleeping, not as busy.
+SETTLED = {"done", "failed", "waiting_for_gpu"}
+# Turned with the drawing; the AI model is thrown away and made again from the turned drawing.
+ROTATED_KINDS = ("cutout", "mask", "creature")
 
 
 class KidIn(BaseModel):
@@ -51,6 +56,27 @@ def rotate_eyes(eyes: list[dict], w: int, h: int, turns: int) -> list[dict]:
 class CreatureUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=40)
     eyes: list[Eye] | None = Field(default=None, max_length=6)
+    chosen_style: Literal["faithful", "ai"] | None = None  # the 3D version the kid picked
+
+
+WorkerState = Field(max_length=40, pattern=r"^[a-z_]+$")
+
+
+class WorkerHello(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=120)
+
+
+class WorkerPing(WorkerHello):
+    state: str = WorkerState            # ready, gaming, quiet_hours, ...
+    detail: str | None = Field(default=None, max_length=200)
+
+
+class WorkerClaim(WorkerHello):
+    steps: list[str] | None = None      # the steps this worker can run; None = all GPU steps
+
+
+class WorkerFail(WorkerHello):
+    error: str = Field(max_length=20000)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -74,6 +100,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             conn.close()
 
     Conn = Annotated[sqlite3.Connection, Depends(get_conn)]
+
+    def worker_auth(authorization: Annotated[str | None, Header()] = None) -> None:
+        """The GPU worker sends `Authorization: Bearer <MONSTER_WORKER_TOKEN>`. The LAN is the only
+        credential for the tablet, but uploads that become a kid's 3D model need a bit more."""
+        if not settings.worker_token:
+            raise HTTPException(503, "GPU worker endpoints are switched off (no MONSTER_WORKER_TOKEN)")
+        if not secrets.compare_digest(authorization or "", f"Bearer {settings.worker_token}"):
+            raise HTTPException(401, "bad worker token")
+
+    Worker = Depends(worker_auth)
+
+    def seen(conn: sqlite3.Connection, worker_id: str, state: str, detail: str | None = None) -> None:
+        conn.execute(
+            "INSERT INTO workers (id, kind, state, detail, last_seen) VALUES (?, 'gpu', ?, ?, ?)"
+            " ON CONFLICT (id) DO UPDATE SET state = excluded.state, detail = excluded.detail,"
+            " last_seen = excluded.last_seen",
+            (worker_id, state, detail, time.time()))
+
+    def leased_job(conn: sqlite3.Connection, job_id: int, worker_id: str) -> sqlite3.Row:
+        job = conn.execute(
+            "SELECT * FROM jobs WHERE id = ? AND worker = 'gpu' AND status = 'running' AND leased_by = ?",
+            (job_id, worker_id)).fetchone()
+        if job is None:
+            raise HTTPException(409, "lease lost")  # expired and handed out again, or creature deleted
+        return job
 
     def creature_or_404(conn: sqlite3.Connection, creature_id: int) -> sqlite3.Row:
         row = conn.execute("SELECT * FROM creatures WHERE id = ?", (creature_id,)).fetchone()
@@ -164,15 +215,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if body.eyes is not None:
             eyes = json.dumps([e.model_dump() for e in body.eyes])
             conn.execute("UPDATE creatures SET eyes = ? WHERE id = ?", (eyes, creature_id))
+        if body.chosen_style is not None:
+            conn.execute("UPDATE creatures SET chosen_style = ? WHERE id = ?", (body.chosen_style, creature_id))
         return creature_out(conn, creature_or_404(conn, creature_id))
 
     @app.post("/creatures/{creature_id}/rotate")
     def rotate_creature(creature_id: int, body: Rotate, conn: Conn):
         """Turn a drawing that was made sideways. Quarter turns are lossless, so the cutout and
-        mask are turned in place right away; the 3D model and print file are made again."""
+        mask are turned in place right away; the 3D models and print file are made again."""
         row = creature_or_404(conn, creature_id)
         paths = {a["kind"]: settings.creatures_dir / a["path"] for a in conn.execute(
-            "SELECT kind, path FROM artifacts WHERE creature_id = ? AND kind IN ('cutout', 'mask')", (creature_id,))}
+            f"SELECT kind, path FROM artifacts WHERE creature_id = ? AND kind IN ({', '.join('?' * len(ROTATED_KINDS))})",
+            (creature_id, *ROTATED_KINDS))}
         if "cutout" not in paths:
             raise HTTPException(409, "no cutout yet")
         h, w = cv2.imread(str(paths["cutout"]), cv2.IMREAD_UNCHANGED).shape[:2]
@@ -189,8 +243,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                          (body.turns, json.dumps(eyes), creature_id))
             for kind, path in paths.items():
                 jobs.add_artifact(conn, creature_id, None, kind, f"{creature_id}/{path.name}")
+            # the AI model of the sideways drawing would stay until the gaming PC is on again
+            conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind = 'mesh_ai'", (creature_id,))
             queued = {r["step"] for r in conn.execute(
-                "SELECT step FROM jobs WHERE creature_id = ? AND status = 'queued'", (creature_id,))}
+                "SELECT step FROM jobs WHERE creature_id = ? AND status IN ('queued', 'waiting_for_gpu')",
+                (creature_id,))}
             for step, kind in NEXT_STEPS["cleanup"]:
                 if step not in queued:  # several quick taps: one redo is enough
                     jobs.enqueue(conn, creature_id, step, kind)
@@ -239,7 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if snap != last:
                         last = snap
                         yield f"event: jobs\ndata: {json.dumps(snap)}\n\n"
-                        if all(j["status"] in TERMINAL for j in snap):
+                        if all(j["status"] in SETTLED for j in snap):
                             yield "event: end\ndata: {}\n\n"
                             return
                     await asyncio.sleep(0.5)
@@ -250,6 +307,108 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stream(), media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # --- GPU worker (gaming PC). It pulls: claim, download inputs, heartbeat, upload, ask again. ---
+
+    @app.post("/worker/ping", dependencies=[Worker], status_code=204)
+    def worker_ping(body: WorkerPing, conn: Conn):
+        """Check-in while not claiming (gaming, quiet hours, ...), for the parent-mode status."""
+        seen(conn, body.worker_id, body.state, body.detail)
+
+    @app.post("/worker/claim", dependencies=[Worker])
+    def worker_claim(body: WorkerClaim, conn: Conn):
+        """The oldest waiting GPU job with its input URLs (relative to /api), or 204."""
+        steps = [s for s in (body.steps if body.steps is not None else GPU_STEPS) if s in GPU_STEPS]
+        seen(conn, body.worker_id, "ready")
+        for _ in range(20):  # skip jobs whose inputs are gone
+            job = jobs.claim(conn, "gpu", body.worker_id, settings.lease_seconds, settings.max_attempts, steps)
+            if job is None:
+                return Response(status_code=204)
+            have = {a["kind"]: a["created_at"] for a in conn.execute(
+                "SELECT kind, created_at FROM artifacts WHERE creature_id = ?", (job["creature_id"],))}
+            inputs, missing = {}, []
+            for name, kinds in GPU_STEPS[job["step"]].inputs.items():
+                kind = next((k for k in kinds if k in have), None)
+                if kind is None:
+                    missing.append(name)
+                else:
+                    inputs[name] = f"creatures/{job['creature_id']}/files/{kind}?v={int(have[kind] * 1000)}"
+            if missing:
+                jobs.fail(conn, job["id"], body.worker_id, f"missing inputs: {', '.join(missing)}")
+                continue
+            seen(conn, body.worker_id, "working", f"{job['step']} for creature {job['creature_id']}")
+            return {"id": job["id"], "creature_id": job["creature_id"], "step": job["step"],
+                    "attempts": job["attempts"], "lease_seconds": settings.lease_seconds, "inputs": inputs}
+        return Response(status_code=204)
+
+    @app.post("/worker/jobs/{job_id}/heartbeat", dependencies=[Worker], status_code=204)
+    def worker_heartbeat(job_id: int, body: WorkerHello, conn: Conn):
+        if not jobs.extend(conn, job_id, body.worker_id, settings.lease_seconds):
+            raise HTTPException(409, "lease lost")
+
+    @app.post("/worker/jobs/{job_id}/release", dependencies=[Worker], status_code=204)
+    def worker_release(job_id: int, body: WorkerHello, conn: Conn):
+        """Hand the job back untouched (a game started, the PC is shutting down)."""
+        jobs.release(conn, job_id, body.worker_id)
+
+    @app.post("/worker/jobs/{job_id}/fail", dependencies=[Worker], status_code=204)
+    def worker_fail(job_id: int, body: WorkerFail, conn: Conn):
+        jobs.fail(conn, job_id, body.worker_id, body.error)
+
+    @app.post("/worker/jobs/{job_id}/done", dependencies=[Worker], status_code=204)
+    async def worker_done(job_id: int, request: Request):
+        """Multipart: worker_id, plus one file per output artifact kind of the step."""
+        form = await request.form(max_files=8, max_fields=8, max_part_size=1024 * 1024)
+        worker_id = form.get("worker_id")
+        if not isinstance(worker_id, str):
+            raise HTTPException(422, "worker_id missing")
+        conn = db.connect(settings.db_path)
+        tmps: list = []
+        try:
+            job = leased_job(conn, job_id, worker_id)
+            spec = GPU_STEPS[job["step"]]
+            uploads = {k: v for k, v in form.items() if k != "worker_id"}
+            if set(uploads) != set(spec.outputs) or any(isinstance(v, str) for v in uploads.values()):
+                raise HTTPException(422, f"expected files: {', '.join(sorted(spec.outputs))}")
+            folder = settings.creatures_dir / str(job["creature_id"])
+            if not folder.is_dir():
+                raise HTTPException(409, "creature deleted")
+            limit = spec.max_mb * 1024 * 1024
+            for kind, upload in uploads.items():
+                data = await upload.read(limit + 1)
+                if len(data) > limit:
+                    raise HTTPException(413, f"{kind} too large")
+                name = spec.outputs[kind]
+                if name.endswith(".glb") and data[:4] != b"glTF":
+                    raise HTTPException(415, f"{kind} is not a GLB file")
+                tmp = folder / f".{name}.upload"
+                tmp.write_bytes(data)
+                tmps.append((tmp, folder / name))
+            leased_job(conn, job_id, worker_id)  # still ours after the upload?
+            for tmp, final in tmps:
+                os.replace(tmp, final)
+            try:
+                ok = jobs.complete(conn, job, worker_id, spec.outputs, NEXT_STEPS.get(job["step"], []))
+            except sqlite3.IntegrityError:
+                raise HTTPException(409, "creature deleted")
+            if not ok:
+                raise HTTPException(409, "lease lost")
+            seen(conn, worker_id, "ready")
+        finally:
+            for tmp, _ in tmps:
+                tmp.unlink(missing_ok=True)
+            conn.close()
+
+    @app.get("/gpu")
+    def gpu_status(conn: Conn):
+        """For parent mode: is the gaming PC around, and how much is waiting for it."""
+        counts = dict(conn.execute(
+            "SELECT status, COUNT(*) FROM jobs WHERE worker = 'gpu' AND status IN ('waiting_for_gpu', 'running')"
+            " GROUP BY status").fetchall())
+        workers = [dict(r) for r in conn.execute(
+            "SELECT id, state, detail, last_seen FROM workers WHERE kind = 'gpu' ORDER BY last_seen DESC")]
+        return {"enabled": bool(settings.worker_token), "waiting": counts.get("waiting_for_gpu", 0),
+                "running": counts.get("running", 0), "workers": workers, "now": time.time()}
 
     return app
 

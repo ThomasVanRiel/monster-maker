@@ -1,4 +1,5 @@
-"""Photo -> cutout.png (RGBA, white sticker edge) + mask.png.
+"""Photo -> cutout.png (RGBA, white sticker edge) + mask.png + creature.png (RGBA, no sticker edge:
+the input for the AI 3D step on the GPU worker).
 
 Port of segment() and processPhoto() in prototype/index.html, plus a perspective crop to the
 paper in front of it:
@@ -32,20 +33,22 @@ PAPER_WHITE = 0.93  # paper at this fraction of its local 90th percentile alread
 @dataclass
 class Cutout:
     sticker: np.ndarray            # BGRA
+    creature: np.ndarray           # BGRA, cropped to the mask, alpha = mask, no sticker edge
     mask: np.ndarray               # uint8 0/1, working resolution (after the perspective crop)
     found: bool                    # False when the fallback window was used
     debug: dict[str, np.ndarray] = field(default_factory=dict)
 
 
 def run(folder: Path) -> dict[str, str]:
-    """Reads folder/drawing.jpg, writes cutout.png and mask.png. Returns {kind: filename}."""
+    """Reads folder/drawing.jpg, writes cutout.png, mask.png and creature.png. Returns {kind: filename}."""
     src = cv2.imread(str(folder / "drawing.jpg"), cv2.IMREAD_COLOR)
     if src is None:
         raise ValueError("drawing.jpg is missing or unreadable")
     cut = cutout(src)
     cv2.imwrite(str(folder / "mask.png"), cut.mask * 255)
     cv2.imwrite(str(folder / "cutout.png"), cut.sticker)
-    return {"cutout": "cutout.png", "mask": "mask.png"}
+    cv2.imwrite(str(folder / "creature.png"), cut.creature)
+    return {"cutout": "cutout.png", "mask": "mask.png", "creature": "creature.png"}
 
 
 def cutout(src: np.ndarray) -> Cutout:
@@ -70,7 +73,7 @@ def cutout(src: np.ndarray) -> Cutout:
     else:
         mask = fallback_mask(h, w)
     debug["mask"] = mask * 255
-    return Cutout(make_sticker(img, mask), mask, found, debug)
+    return Cutout(make_sticker(img, mask), crop_creature(img, mask), mask, found, debug)
 
 
 # 1. the paper ---------------------------------------------------------------------------------
@@ -270,6 +273,21 @@ def fallback_mask(h: int, w: int) -> np.ndarray:
     dx = (x - w / 2) / (w * 0.36)
     dy = (y - h / 2) / (h * 0.36)
     return ((dx**4 + dy**4) < 1).astype(np.uint8)
+
+
+def crop_creature(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """The creature alone at working resolution: cropped to the mask with a small margin, alpha =
+    mask. BGRA out. The AI 3D model gets this; the sticker edge would become part of its shape."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        raise ValueError("empty mask")
+    h, w = mask.shape
+    pad = max(2, round(max(np.ptp(xs), np.ptp(ys)) * 0.02))
+    x0, x1 = max(0, xs.min() - pad), min(w, xs.max() + pad + 1)
+    y0, y1 = max(0, ys.min() - pad), min(h, ys.max() + pad + 1)
+    out = np.dstack([img[y0:y1, x0:x1], mask[y0:y1, x0:x1] * 255]).astype(np.uint8)
+    out[out[..., 3] == 0, :3] = 255  # no paper colour bleeding in at the edge
+    return out
 
 
 def make_sticker(img: np.ndarray, mask: np.ndarray) -> np.ndarray:

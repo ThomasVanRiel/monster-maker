@@ -11,6 +11,7 @@ class Settings:
     lease_seconds: float
     max_attempts: int
     max_upload_mb: int
+    worker_token: str = ""   # shared secret for the GPU worker; empty = GPU endpoints switched off
 
     @property
     def db_path(self) -> Path:
@@ -27,4 +28,5 @@ def load_settings() -> Settings:
         lease_seconds=float(os.environ.get("MONSTER_LEASE_SECONDS", "600")),
         max_attempts=int(os.environ.get("MONSTER_MAX_ATTEMPTS", "3")),
         max_upload_mb=int(os.environ.get("MONSTER_MAX_UPLOAD_MB", "25")),
+        worker_token=os.environ.get("MONSTER_WORKER_TOKEN", ""),
     )
