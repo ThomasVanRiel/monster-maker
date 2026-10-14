@@ -33,6 +33,7 @@ RULE_LENGTH = 1 / 10  # printed ruling: straight lines longer than this fraction
 RULE_SPAN = 0.4     # ... that together run across at least this fraction of it
 RULE_FAINT = 0.015  # ... and are at least this much darker than the paper next to them
 RULE_TILT = (-3, -2, -1, 0, 1, 2, 3)  # degrees off straight that a ruled line may run
+NO_SHEET_MAX = 0.5  # no sheet found: a "creature" over this fraction of the photo is texture, not ink
 
 
 @dataclass
@@ -63,6 +64,7 @@ def cutout(src: np.ndarray) -> Cutout:
     debug = {"photo": img}
 
     paper = find_paper(img)
+    sheet = not paper.all()
     debug["paper"] = paper * 255
     quad = paper_quad(paper)
     if quad is not None:
@@ -74,7 +76,8 @@ def cutout(src: np.ndarray) -> Cutout:
     debug["rules"] = rules * 255
     mask = segment(img, paper, debug)
     h, w = img.shape[:2]
-    found = w * h * 0.003 < mask.sum() < w * h * 0.92
+    # Without a sheet (a printed puzzle on a carpet), the carpet's texture passes as ink everywhere
+    found = w * h * 0.003 < mask.sum() < w * h * (0.92 if sheet else NO_SHEET_MAX)
     if found:
         img = whiten(img, paper)
     else:
