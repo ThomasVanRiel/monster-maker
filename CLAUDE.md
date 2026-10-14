@@ -86,12 +86,13 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 `server/monster/steps/cleanup.py` is a port of the prototype's `segment()` / `processPhoto()`, changed where real photos broke it:
 
 1. Find the paper by growing it from a bright seed near the middle (small neighbour steps pass soft shading, the sheet's edge stops it) — Otsu split a half-shadowed sheet in two. Straighten it only when it is clearly a four-sided sheet; a wrong warp bends the drawing.
-2. Even out lighting: per-block paper brightness (90th percentile), one max-spread pass, bilinear per pixel.
-3. Ink = clearly darker than local paper, or clearly coloured; faint stretches count when they are thin (black-hat) and touch the dark ink. The printed lines of a ruled or squared pad (faint, thin, straight over 1/8 of the sheet, not next to dark ink) are paper: never ink, and whitened in the sticker.
-4. Drop specks below a minimum area.
-5. Close outline gaps with the smallest closing that encloses nearly as much as the widest, flood from the border, shrink back to the line. Keep the biggest shape plus pieces close to it: printed logos or headers elsewhere on the sheet are dropped.
-6. White-balance against the paper per channel with a mild contrast curve; add a white "sticker" edge.
-7. Fallback when nothing is found: a soft rounded window in the middle of the photo.
+2. Flatten a ruled or squared pad (`flatten_ruling`): a grey closing with long thin line kernels (a few angles, horizontal and vertical apart) is the paper *with* its printed lines; what is thin, faint and runs across 40% of the sheet is ruling and gets divided out, so the rest never sees it. Clearly dark ink is left untouched.
+3. Even out lighting: per-block paper brightness (90th percentile), one max-spread pass, bilinear per pixel.
+4. Ink = clearly darker than local paper, or clearly coloured; faint stretches count when they are thin (black-hat) and touch the dark ink.
+5. Drop specks below a minimum area.
+6. Close outline gaps with the smallest closing that encloses nearly as much as the widest, flood from the border, shrink back to the line. Keep the biggest shape plus pieces close to it: printed logos or headers elsewhere on the sheet are dropped.
+7. White-balance against the paper per channel with a mild contrast curve; add a white "sticker" edge.
+8. Fallback when nothing is found: a soft rounded window in the middle of the photo.
 
 To tune: put photos in `tests/fixtures/` and run `uv run python scripts/cutout_debug.py ../tests/fixtures/*` in `server/` — it writes every stage side by side to `cutout-debug/`. Each fixture gets a test in `server/tests/test_cleanup.py`.
 

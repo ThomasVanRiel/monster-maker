@@ -4,9 +4,9 @@ Port of segment() and processPhoto() in prototype/index.html, plus a perspective
 paper in front of it:
 
 1. find the paper (Otsu split, largest bright region, holes filled) and straighten it
+1b. flatten the printed lines of a ruled or squared pad into the paper
 2. even out the lighting (per-block paper brightness, spread, bilinear per pixel)
-3. ink = clearly darker than the local paper, or clearly coloured; the printed lines of ruled or
-   squared paper are paper, not ink
+3. ink = clearly darker than the local paper, or clearly coloured
 4. drop specks
 5. close outline gaps, flood from the border; what the outside can't reach is the creature
 6. whiten the paper inside the mask, keep crayon colours, add a white sticker edge
@@ -28,8 +28,10 @@ INK_DARK = 0.78   # ink: darker than this fraction of the local paper brightness
 INK_FAINT = 0.90  # ... or this, when connected to the darker ink and thin
 INK_CONTRAST = 1.6  # exponent on (pixel / paper) when whitening
 PAPER_WHITE = 0.93  # paper at this fraction of its local 90th percentile already counts as white
-RULE_FAINT = 0.04  # printed ruling: a thin line at least this much darker than the paper ...
-RULE_LENGTH = 1 / 8  # ... running straight across at least this fraction of the sheet
+RULE_LENGTH = 1 / 10  # printed ruling: straight lines longer than this fraction of the sheet ...
+RULE_SPAN = 0.4     # ... that together run across at least this fraction of it
+RULE_FAINT = 0.015  # ... and are at least this much darker than the paper next to them
+RULE_TILT = (-3, -2, -1, 0, 1, 2, 3)  # degrees off straight that a ruled line may run
 
 
 @dataclass
@@ -65,13 +67,13 @@ def cutout(src: np.ndarray) -> Cutout:
         paper = np.ones(img.shape[:2], np.uint8)
         debug["straightened"] = img
 
-    rules = ruled_lines(img, paper)
+    img, rules = flatten_ruling(img, paper)
     debug["rules"] = rules * 255
-    mask = segment(img, paper, rules, debug)
+    mask = segment(img, paper, debug)
     h, w = img.shape[:2]
     found = w * h * 0.003 < mask.sum() < w * h * 0.92
     if found:
-        img = whiten(img, paper, rules)
+        img = whiten(img, paper)
     else:
         mask = fallback_mask(h, w)
     debug["mask"] = mask * 255
@@ -141,11 +143,66 @@ def warp_to_quad(img: np.ndarray, quad: np.ndarray) -> np.ndarray:
                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 
+# 1b. ruled and squared paper -------------------------------------------------------------------
+
+def line_kernel(n: int, degrees: float) -> np.ndarray:
+    """An n x n structuring element: a 1 px line through the centre at this angle."""
+    k = np.zeros((n, n), np.uint8)
+    r, t = n // 2, np.deg2rad(degrees)
+    dx, dy = r * np.cos(t), r * np.sin(t)
+    cv2.line(k, (round(r - dx), round(r - dy)), (round(r + dx), round(r + dy)), 1, 1)
+    return k
+
+
+def flatten_ruling(img: np.ndarray, paper: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Divide the printed lines of a ruled or squared pad out of the photo, so the rest of the
+    pipeline sees plain paper. Returns (flattened image, uint8 0/1 map of the lines).
+
+    A grey closing with a long thin line kernel wipes out everything shorter than the kernel (the
+    whole drawing, and where a pen stroke crosses a printed line the line carries on) and keeps
+    long straight lines: that is the paper *with* its ruling. A few angles cover a sheet that is
+    a bit off straight, and horizontal and vertical go separately, so a long vertical pen stroke
+    doesn't cut the horizontal lines in two. Only what is thin there (not a broad shadow), faint
+    (not ink) and runs across a good part of the sheet (not a kid's line) counts as ruling.
+    """
+    h, w = paper.shape
+    n = max(15, round(min(w, h) * RULE_LENGTH)) | 1
+    k = max(7, round(min(w, h) / 45)) | 1
+    hat = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    lum = luminance(img)
+    light = paper_light(lum, paper)
+    lights = [paper_light(img[..., c].astype(np.float32), paper) for c in range(3)]
+    refs = [l.copy() for l in lights]
+    rules = np.zeros((h, w), np.uint8)
+    for base, extent, size in ((0, cv2.CC_STAT_WIDTH, w), (90, cv2.CC_STAT_HEIGHT, h)):
+        kernels = [line_kernel(n, base + a) for a in RULE_TILT]
+        close = lambda ch: np.min([cv2.morphologyEx(ch, cv2.MORPH_CLOSE, kk) for kk in kernels], axis=0)
+        bg = close(lum)
+        thin = cv2.morphologyEx(bg, cv2.MORPH_BLACKHAT, hat)
+        line = ((thin > light * RULE_FAINT) & (bg > light * INK_DARK) & (paper > 0)).astype(np.uint8)
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(line, connectivity=8)
+        keep = stats[:, extent] >= RULE_SPAN * size
+        keep[0] = False
+        found = cv2.dilate(keep[labels].astype(np.uint8), CROSS)  # with the soft edges
+        rules |= found
+        for c in range(3):
+            # the ruling is never darker than ink: along a long pen stroke the closing sees the
+            # stroke, and dividing by that would bleach it
+            bc = np.maximum(close(img[..., c]).astype(np.float32), lights[c] * INK_DARK * 0.8)
+            refs[c] = np.where(found > 0, np.minimum(refs[c], bc), refs[c])
+    if not rules.any():
+        return img, rules
+    flat = np.stack([img[..., c] * lights[c] / refs[c] for c in range(3)], axis=2)
+    flat = np.clip(flat, 0, 255).astype(np.uint8)
+    ink = lum < light * INK_DARK  # clearly dark ink stays exactly as drawn
+    flat[ink] = img[ink]
+    return flat, rules
+
+
 # 2-5. segmentation ----------------------------------------------------------------------------
 
-def segment(img: np.ndarray, paper: np.ndarray, rules: np.ndarray | None = None, debug: dict | None = None):
-    """Creature mask, uint8 0/1 (all zero when nothing was found). `rules` (printed lines of the
-    pad, see ruled_lines) never count as ink."""
+def segment(img: np.ndarray, paper: np.ndarray, debug: dict | None = None):
+    """Creature mask, uint8 0/1 (all zero when nothing was found)."""
     debug = {} if debug is None else debug
     h, w = paper.shape
     lum = luminance(img)
@@ -154,8 +211,6 @@ def segment(img: np.ndarray, paper: np.ndarray, rules: np.ndarray | None = None,
     # keep away from the paper's edge, where shadows and the table look like ink
     er = max(3, round(min(w, h) / 120))
     region = cv2.erode(paper, CROSS, iterations=er, borderType=cv2.BORDER_CONSTANT, borderValue=0)
-    if rules is not None:
-        region = region & (1 - rules)
 
     light = paper_light(lum, paper)
     debug["light"] = light.astype(np.uint8)
@@ -175,36 +230,6 @@ def segment(img: np.ndarray, paper: np.ndarray, rules: np.ndarray | None = None,
     debug["ink_clean"] = ink * 255
 
     return keep_creature(fill_outline(ink, paper, debug))
-
-
-def ruled_lines(img: np.ndarray, paper: np.ndarray) -> np.ndarray:
-    """The printed lines of ruled or squared paper, uint8 0/1.
-
-    They are faint, thin and run straight across the sheet; a kid's pen line is darker, or
-    shorter, or wobbles. Look for thin dark-ish lines (black-hat) that stay straight over a long
-    stretch, horizontal or vertical. The soft grey edge along a pen stroke is thin and faint too,
-    so nothing next to clearly dark ink is a candidate; where a pen stroke crosses a printed line
-    the short break is bridged. Clearly dark ink itself is never a rule (zebra stripes!).
-    """
-    h, w = paper.shape
-    lum = luminance(img)
-    light = paper_light(lum, paper)
-    k = max(7, round(min(w, h) / 45)) | 1
-    thin = cv2.morphologyEx(lum, cv2.MORPH_BLACKHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
-    dark = (lum < light * INK_DARK).astype(np.uint8)
-    line = ((thin > light * RULE_FAINT) & (paper > 0)).astype(np.uint8)
-    away = line & (1 - cv2.dilate(dark, CROSS, iterations=2))
-    n = max(15, round(min(w, h) * RULE_LENGTH))
-    bridge = max(9, round(min(w, h) / 50))
-    rect = lambda w, h: cv2.getStructuringElement(cv2.MORPH_RECT, (w, h))
-    rules = np.zeros_like(line)
-    for t in (lambda w, h: rect(w, h), lambda w, h: rect(h, w)):  # horizontal, vertical
-        # widen across the line first, so a sheet that is a few degrees off still passes
-        wide = cv2.morphologyEx(cv2.dilate(away, t(1, 5)), cv2.MORPH_CLOSE, t(bridge, 1))
-        rules |= cv2.morphologyEx(wide, cv2.MORPH_OPEN, t(n, 1))
-    rules &= cv2.dilate(line, CROSS)
-    dark = cv2.dilate(dark, CROSS)
-    return (rules & (1 - dark)).astype(np.uint8)
 
 
 def keep_creature(mask: np.ndarray) -> np.ndarray:
@@ -289,19 +314,16 @@ def flood_from_border(passable: np.ndarray) -> np.ndarray:
 
 # 6-7. whitening, sticker and fallback -----------------------------------------------------------
 
-def whiten(img: np.ndarray, paper: np.ndarray, rules: np.ndarray | None = None) -> np.ndarray:
+def whiten(img: np.ndarray, paper: np.ndarray) -> np.ndarray:
     """White-balance against the local paper, per channel, so the sheet comes out white whatever
     the room light, and crayon keeps its colour relative to it. A mild curve on the ratio to the
     paper puts back the contrast the camera lost: a pen line looks like a pen line again.
-    The printed lines of a ruled pad (`rules`) become paper: they aren't part of the drawing.
     """
     out = np.empty_like(img)
     for c in range(3):
         ch = img[..., c].astype(np.float32)
         ratio = np.clip(ch / np.maximum(60, PAPER_WHITE * paper_light(ch, paper)), 0, 1)
         out[..., c] = np.round(255 * ratio**INK_CONTRAST).astype(np.uint8)
-    if rules is not None:
-        out[rules > 0] = 255
     return out
 
 
