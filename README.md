@@ -92,6 +92,23 @@ Setup, once:
 
 Test in two steps: first with `MONSTER_GPU_PLACEHOLDER=1` (no model: the drawing on a flat card) to check the round trip, then without it. The image is built by `.github/workflows/gpu.yml` when `gpu/` changes on `main`, or by hand from the Actions tab.
 
+### Trying it from a clone on the gaming PC
+
+Before anything is deployed, the whole stack can run from source on the PC itself (NVIDIA driver and Container Toolkit as in step 2 above):
+
+```
+git clone git@github.com:<user>/monster-maker.git && cd monster-maker && git switch phase2-gpu-trellis
+mkdir -p data cache                      # owned by you, before Docker creates them as root
+echo "HF_TOKEN=hf_..." > .env            # after accepting the DINOv3 licence
+docker compose -f compose.dev.yaml --profile gpu up --build
+```
+
+The first build compiles the CUDA extensions (~30–60 min). Then open http://localhost:8099, unlock parent mode (hold the lock) and use "Add from photos" with `tests/fixtures/*.jpeg`. The first AI job also downloads ~16 GB of weights into `cache/`. Follow it with `docker compose -f compose.dev.yaml logs -f gpu-worker`; the sparkle appears on the 3D badge when it is done.
+
+- Plumbing only, no model: add `MONSTER_GPU_PLACEHOLDER=1` to `.env`.
+- TRELLIS alone on one picture, with timing and peak VRAM: `docker compose -f compose.dev.yaml --profile gpu run --rm gpu-worker python -m monster_gpu.try_step ai3d /data/creatures/1/creature.png /data/try` (the result is `data/try/ai.glb`; drop it on https://gltf-viewer.donmccurdy.com or open it in Blender).
+- Game check: start a Steam game while a job runs; the log shows it being handed back.
+
 Tuning (gaming PC `.env`): `MONSTER_TRELLIS_PIPELINE` (`1024_cascade` by default; out of memory falls back to `512`), `MONSTER_AI_FACES`, `MONSTER_AI_TEXTURE`, and `MONSTER_AI_YAW_DEG` if the AI monster faces away from the camera.
 
 ## Deploy

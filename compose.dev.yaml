@@ -1,6 +1,8 @@
 # Dev machines: build from source, hot reload, local test data in ./data (gitignored).
 # Run: docker compose -f compose.dev.yaml up --build   then open http://localhost:8099
 # (localhost counts as a secure context, so the live camera works without TLS)
+# On the gaming PC, add the GPU worker (built from gpu/, needs the NVIDIA Container Toolkit):
+#      docker compose -f compose.dev.yaml --profile gpu up --build
 name: monster-maker-dev
 
 x-api-build: &api-build
@@ -8,6 +10,7 @@ x-api-build: &api-build
   user: "${PUID:-1000}:${PGID:-1000}"
   environment:
     MONSTER_DATA_DIR: /data
+    MONSTER_WORKER_TOKEN: ${MONSTER_WORKER_TOKEN:-dev}
   volumes:
     - ./server/monster:/app/monster
     - ./data:/data
@@ -51,3 +54,34 @@ services:
       HOME: /tmp
     volumes:
       - ./frontend:/app
+
+  # GPU worker from source (profile "gpu"): the first build compiles the CUDA extensions
+  # (~30-60 min), later builds only copy the code; monster_gpu/ is mounted, so restart to pick
+  # up changes. Set HF_TOKEN (and optionally MONSTER_GPU_PLACEHOLDER=1) in .env next to this file.
+  gpu-worker:
+    profiles: [gpu]
+    build: ./gpu
+    user: "${PUID:-1000}:${PGID:-1000}"
+    pid: host  # see the host's processes, for the game check
+    environment:
+      MONSTER_SERVER: http://api:8000
+      MONSTER_WORKER_TOKEN: ${MONSTER_WORKER_TOKEN:-dev}
+      MONSTER_POLL_SECONDS: ${MONSTER_POLL_SECONDS:-5}
+      MONSTER_GPU_PLACEHOLDER: ${MONSTER_GPU_PLACEHOLDER:-}
+      MONSTER_TRELLIS_PIPELINE: ${MONSTER_TRELLIS_PIPELINE:-1024_cascade}
+      MONSTER_AI_YAW_DEG: ${MONSTER_AI_YAW_DEG:-0}
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./gpu/monster_gpu:/app/monster_gpu
+      - ./data:/data  # for try_step on a creature's creature.png
+      - ${CACHE_DIR:-./cache}:/cache  # model weights (~16 GB), kept between runs
+    depends_on:
+      - api
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

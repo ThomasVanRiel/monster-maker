@@ -30,6 +30,9 @@ caddy_config/
 .pnpm-store/
 cutout-debug/
 
+# GPU worker: model weights and compile caches (compose.dev.yaml, compose.gpu.yaml)
+cache/
+
 # private, machine-local: real domain, addresses, working configs (see CLAUDE.local.md)
 CLAUDE.local.md
 *.local.conf
