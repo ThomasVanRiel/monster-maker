@@ -39,7 +39,9 @@ RUN git clone --recursive https://github.com/JeffreyXiang/FlexGEMM.git \
     && git -C FlexGEMM checkout ${FLEXGEMM_REF} && git -C FlexGEMM submodule update --init --recursive \
     && pip install ./FlexGEMM --no-build-isolation \
     && cp ~/.flex_gemm/autotune_cache.json /venv/flex_gemm_autotune_cache.json
+# o-voxel compiles against Eigen, TRELLIS.2's one git submodule (o-voxel/third_party/eigen)
 RUN git clone https://github.com/microsoft/TRELLIS.2.git /opt/trellis2 && git -C /opt/trellis2 checkout ${TRELLIS_REF} \
+    && git -C /opt/trellis2 submodule update --init --recursive \
     && pip install /opt/trellis2/o-voxel --no-build-isolation --no-deps \
     && rm -rf /opt/trellis2/.git /opt/trellis2/assets
 
