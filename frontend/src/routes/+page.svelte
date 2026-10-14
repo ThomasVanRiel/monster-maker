@@ -9,6 +9,7 @@
 		updateCreature,
 		type Creature,
 		type Kid,
+		type Skin,
 		type Style
 	} from '#lib/api.ts';
 	import { prefs } from '#lib/prefs.svelte.ts';
@@ -103,6 +104,16 @@
 		await updateCreature(id, { chosen_style: style }).catch(() => {});
 	}
 
+	async function reskin(id: number, skin: Skin) {
+		creatures = creatures.map((x) => (x.id === id ? { ...x, skin } : x));
+		try {
+			const c = await updateCreature(id, { skin });
+			creatures = creatures.map((x) => (x.id === id ? c : x)); // with the new imagine job: sleepy swatch
+		} catch {
+			/* not saved; the next refresh shows the old skin again */
+		}
+	}
+
 	async function remove(id: number) {
 		creatures = creatures.filter((c) => c.id !== id);
 		await deleteCreature(id).catch(() => {});
@@ -128,7 +139,12 @@
 		}}
 	/>
 {:else if screen === 'puff' && puffed}
-	<Puff creature={puffed} onback={() => (screen = 'hill')} onchoose={(style) => choose(puffed.id, style)} />
+	<Puff
+		creature={puffed}
+		onback={() => (screen = 'hill')}
+		onchoose={(style) => choose(puffed.id, style)}
+		onskin={(skin) => reskin(puffed.id, skin)}
+	/>
 {:else if screen === 'lens' && kid}
 	<Lens kidColor={kid.color} onphoto={takePhoto} onback={() => (screen = 'hill')} />
 {:else if screen === 'wake' && kid && photo}

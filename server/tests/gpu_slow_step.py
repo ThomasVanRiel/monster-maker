@@ -3,6 +3,6 @@
 import time
 
 
-def run(inputs, out):
+def run(inputs, out, params):
     time.sleep(30)
     return {}

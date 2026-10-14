@@ -26,14 +26,29 @@ MODEL = os.environ.get("MONSTER_IMAGINE_MODEL", "black-forest-labs/FLUX.2-klein-
 MODEL_REVISION = os.environ.get("MONSTER_IMAGINE_REVISION", "e7b7dc27f91deacad38e78976d1f2b499d76a294")
 CUTOUT_MODEL = "ZhengPeng7/BiRefNet"
 CUTOUT_REVISION = "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4"  # its code runs (trust_remote_code): pinned
+# Names no kind of creature and no body parts: "monster", "horns, teeth", "big eyes" and "facing the
+# viewer" turned a zebra and a many-legged giraffe into the same horned, front-facing pastel monster.
+# {skin} is what the kid picked on the 3D screen (SKINS); a MONSTER_IMAGINE_PROMPT without it gets
+# the skin at the end. "Soft stylised materials" alone made every creature fluffy.
 PROMPT = os.environ.get("MONSTER_IMAGINE_PROMPT") or (
-    "Turn this child's drawing of a monster into a character from a 3D animated film. "
-    "Keep the same creature: its body shape, its colours and patterns, and exactly the same number "
-    "of eyes, arms, legs, horns and teeth. Give it appealing rounded volumes, big expressive eyes, "
-    "a friendly face and soft stylised materials, like a cute animated movie character. "
-    "Full body, standing, facing the viewer, the whole creature in the picture, "
-    "centred on a plain white background, soft even studio light, no shadow, no text."
+    "Turn this drawing into a character from a 3D animated film. Keep exactly what is drawn: "
+    "the same creature, pose, viewpoint, proportions and patterns, with the same body parts and "
+    "nothing added. Keep the colours of the drawing; parts left uncoloured get the natural colours "
+    "of what is drawn. Rounded, appealing volumes. {skin} "
+    "The whole body in frame, centred on a plain white background, soft even light, no shadow, no text."
 )
+# The server's list (server/monster/steps/__init__.py, SKINS); an unknown name gets the default.
+SKINS = {
+    "toy": "Make it a smooth, glossy vinyl toy figure.",
+    "fluffy": "Give it soft, fluffy fur, like a plush toy.",
+    "slimy": "Make it out of shiny, wobbly, slightly see-through slime, glistening and a bit drippy.",
+    "scaly": "Cover it in shiny overlapping scales, like a friendly dragon.",
+    "knitted": "Make it knitted from chunky wool yarn, like a crocheted amigurumi toy.",
+    "clay": "Make it from modelling clay, like a stop-motion puppet, with soft thumbprints in the clay.",
+    "candy": "Make it out of sweets: glossy hard candy, gummy jelly and sugar icing.",
+    "metal": "Make it a robot of polished, painted metal plates with little rivets.",
+}
+DEFAULT_SKIN = "toy"
 STEPS = int(os.environ.get("MONSTER_IMAGINE_STEPS", "4"))
 SEED = int(os.environ.get("MONSTER_IMAGINE_SEED", "42"))
 OFFLOAD = os.environ.get("MONSTER_IMAGINE_OFFLOAD", "1") not in ("0", "false", "no")
@@ -41,14 +56,14 @@ SIZE = 1024      # the reference picture and the result
 MARGIN = 0.12    # white space around the drawing, so the character has room to grow
 
 
-def run(inputs: dict[str, Path], out: Path) -> dict[str, str]:
+def run(inputs: dict[str, Path], out: Path, params: dict | None = None) -> dict[str, str]:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     import torch
     from PIL import Image
 
     reference = on_white_square(Image.open(inputs["image"]), SIZE, MARGIN)
-    picture = imagine(reference)
+    picture = imagine(reference, prompt((params or {}).get("skin")))
     gc.collect()
     torch.cuda.empty_cache()
     rgba = crop_to_alpha(cut_out(picture))
@@ -75,7 +90,12 @@ def on_white_square(image, size: int, margin: float):
     return square.convert("RGB")
 
 
-def imagine(reference):
+def prompt(skin: str | None) -> str:
+    words = SKINS.get(skin or DEFAULT_SKIN, SKINS[DEFAULT_SKIN])
+    return PROMPT.replace("{skin}", words) if "{skin}" in PROMPT else f"{PROMPT} {words}"
+
+
+def imagine(reference, prompt: str):
     import torch
     from diffusers import Flux2KleinPipeline
 
@@ -85,9 +105,9 @@ def imagine(reference):
         pipe.enable_model_cpu_offload()
     else:
         pipe.to("cuda")
-    log.info("imagining (%s steps, seed %s)", STEPS, SEED)
+    log.info("imagining (%s steps, seed %s): %s", STEPS, SEED, prompt)
     picture = pipe(
-        image=reference, prompt=PROMPT, height=SIZE, width=SIZE,
+        image=reference, prompt=prompt, height=SIZE, width=SIZE,
         num_inference_steps=STEPS, guidance_scale=1.0,
         generator=torch.Generator("cpu").manual_seed(SEED),
     ).images[0]

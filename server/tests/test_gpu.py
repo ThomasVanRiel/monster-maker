@@ -106,6 +106,32 @@ def test_rotate_drops_the_ai_version_and_waits_for_a_new_one(client, settings, t
     assert waiting == ["imagine"]  # once, however often it was turned
 
 
+def test_new_skin_makes_the_ai_version_again_and_goes_with_the_job(client, settings, tmp_path):
+    cid = cleaned_creature(client, settings)
+    assert client.get(f"/creatures/{cid}").json()["skin"] == "toy"
+    claim = client.post("/worker/claim", json={"worker_id": "w"}, headers=AUTH).json()
+    assert claim["step"] == "imagine" and claim["params"] == {"skin": "toy"}
+    client.post(f"/worker/jobs/{claim['id']}/release", json={"worker_id": "w"}, headers=AUTH)
+
+    w = gpu_worker(client, tmp_path)
+    w.tick()  # imagine; ai3d waits
+    c = client.patch(f"/creatures/{cid}", json={"skin": "slimy"}).json()
+    assert c["skin"] == "slimy" and "imagined" in c["files"]  # the old one stays until the new is made
+    client.patch(f"/creatures/{cid}", json={"skin": "slimy"})
+    c = client.patch(f"/creatures/{cid}", json={"skin": "candy"}).json()
+    waiting = [j["step"] for j in c["jobs"] if j["status"] == "waiting_for_gpu"]
+    assert waiting == ["imagine"]  # the old ai3d is dropped, imagine waits once
+    claim = client.post("/worker/claim", json={"worker_id": "w"}, headers=AUTH).json()
+    assert claim["params"] == {"skin": "candy"}  # read when claimed: the last pick wins
+    assert client.patch(f"/creatures/{cid}", json={"skin": "lava"}).status_code == 422
+
+
+def test_skin_before_cleanup_waits_for_it(client, settings):
+    cid = upload(client, 1).json()["id"]
+    c = client.patch(f"/creatures/{cid}", json={"skin": "fluffy"}).json()
+    assert c["skin"] == "fluffy" and [j["step"] for j in c["jobs"]] == ["cleanup"]
+
+
 def test_gaming_pc_reports_and_does_not_claim(client, settings, tmp_path):
     cleaned_creature(client, settings)
     w = gpu_worker(client, tmp_path)

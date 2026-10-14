@@ -3,18 +3,39 @@
 	// with a finger; the AR button (only where the tablet supports it) puts it on the table.
 	// Once the gaming PC has made the AI version, it spins in a bubble in the corner: tapping the
 	// bubble swaps the two, and the one in front is the kid's pick (chosen_style).
+	// The swatch in the top corner is what the AI version is made of (fluffy, slimy, metal, ...):
+	// it opens the other swatches, and a new pick makes the AI version again on the gaming PC.
 	// model-viewer (and three.js) load only when this screen opens.
 	import { onMount, untrack } from 'svelte';
-	import type { Creature, Style } from '../api';
+	import { getGpu, SKINS, type Creature, type Skin, type Style } from '../api';
 	import { sfx } from '../sfx';
+	import SkinIcon from './SkinIcon.svelte';
 
 	let {
 		creature,
 		onback,
-		onchoose
-	}: { creature: Creature; onback: () => void; onchoose: (style: Style) => void } = $props();
+		onchoose,
+		onskin
+	}: {
+		creature: Creature;
+		onback: () => void;
+		onchoose: (style: Style) => void;
+		onskin: (skin: Skin) => void;
+	} = $props();
 	let ready = $state(false);
 	let shown = $state(false);
+	let gpu = $state(false); // no gaming PC set up: no AI version, nothing to pick
+	let picking = $state(false);
+	// a new skin is on its way (the old AI version shows until then)
+	const remaking = $derived(
+		creature.jobs.some((j) => (j.step === 'imagine' || j.step === 'ai3d') && j.status !== 'done' && j.status !== 'failed')
+	);
+
+	function pick(skin: Skin) {
+		sfx.skin(skin);
+		picking = false;
+		if (skin !== creature.skin) onskin(skin);
+	}
 
 	const src = (style: Style) => (style === 'ai' ? creature.files.mesh_ai : creature.files.mesh_faithful);
 	const hasAi = $derived(!!creature.files.mesh_ai && !!creature.files.mesh_faithful);
@@ -32,6 +53,10 @@
 	}
 
 	onMount(async () => {
+		getGpu().then(
+			(g) => (gpu = g.enabled),
+			() => {}
+		);
 		await import('@google/model-viewer');
 		ready = true;
 	});
@@ -97,6 +122,34 @@
 	{/if}
 	{#if !shown}
 		<div class="waiting" aria-hidden="true"><span></span></div>
+	{/if}
+
+	{#if gpu}
+		<div class="skins">
+			<button
+				class="skin current"
+				class:remaking
+				type="button"
+				aria-label="What it is made of"
+				aria-expanded={picking}
+				onclick={() => {
+					sfx.click();
+					picking = !picking;
+				}}
+			>
+				<SkinIcon skin={creature.skin} />
+				{#if remaking}<span class="zzz" aria-hidden="true">z</span>{/if}
+			</button>
+			{#if picking}
+				<div class="palette">
+					{#each SKINS.filter((s) => s !== creature.skin) as skin, i (skin)}
+						<button class="skin" type="button" aria-label={skin} style="--i: {i}" onclick={() => pick(skin)}>
+							<SkinIcon {skin} />
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	{/if}
 
 	<button
@@ -250,13 +303,88 @@
 	.ar svg {
 		width: 58%;
 	}
+	.skins {
+		position: absolute;
+		top: calc(16px + env(safe-area-inset-top, 0px));
+		right: calc(16px + env(safe-area-inset-right, 0px));
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+		max-height: calc(100% - 32px);
+	}
+	.skin {
+		position: relative;
+		width: clamp(60px, 10vmin, 84px);
+		aspect-ratio: 1;
+		border-radius: 50%;
+		border: 5px solid var(--ink);
+		background: var(--paper);
+		padding: 6px;
+		cursor: pointer;
+		box-shadow: 0 6px 0 rgba(46, 42, 59, 0.25);
+	}
+	.skin.current {
+		width: clamp(72px, 12vmin, 100px);
+		border-color: var(--brass);
+		background: var(--moon);
+	}
+	.skin.remaking :global(svg) {
+		animation: snooze 2.4s ease-in-out infinite;
+	}
+	.zzz {
+		position: absolute;
+		top: -14px;
+		left: -8px;
+		font: 700 26px var(--display);
+		color: var(--night);
+		animation: drift 2.4s ease-in-out infinite;
+	}
+	@keyframes snooze {
+		50% {
+			transform: scale(0.88) rotate(-6deg);
+			opacity: 0.7;
+		}
+	}
+	@keyframes drift {
+		0% {
+			transform: translate(0, 6px);
+			opacity: 0;
+		}
+		50% {
+			opacity: 1;
+		}
+		100% {
+			transform: translate(-8px, -10px);
+			opacity: 0;
+		}
+	}
+	.palette {
+		display: grid;
+		grid-template-columns: repeat(2, auto);
+		gap: 10px;
+		overflow-y: auto;
+		padding: 4px 4px 10px;
+	}
+	.palette .skin {
+		animation: pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+		animation-delay: calc(var(--i) * 35ms);
+	}
+	@keyframes pop-in {
+		from {
+			transform: scale(0);
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
 		model-viewer {
 			transition: opacity 0.3s;
 			transform: none;
 		}
 		.waiting span,
-		.bubble {
+		.bubble,
+		.skin.remaking :global(svg),
+		.zzz,
+		.palette .skin {
 			animation: none;
 		}
 	}

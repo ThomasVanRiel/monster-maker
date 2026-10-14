@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS creatures (
     created_at    REAL NOT NULL,
     chosen_style  TEXT,
     eyes          TEXT NOT NULL DEFAULT '[]',  -- rigging aid: JSON [{x, y, r}] in cutout coordinates (0..1)
-    rotation      INTEGER NOT NULL DEFAULT 0   -- quarter turns clockwise applied to the cutout (0-3)
+    rotation      INTEGER NOT NULL DEFAULT 0,  -- quarter turns clockwise applied to the cutout (0-3)
+    skin          TEXT                         -- what the AI version is made of (steps.SKINS); NULL: the default
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -75,6 +76,7 @@ DEFAULT_KIDS = [("Kid 1", "#FF8A3D"), ("Kid 2", "#3D7BFF")]
 # Columns added after the first deploy: CREATE TABLE IF NOT EXISTS won't add them to an old file.
 MIGRATIONS = [
     ("creatures", "rotation", "INTEGER NOT NULL DEFAULT 0"),
+    ("creatures", "skin", "TEXT"),
 ]
 
 

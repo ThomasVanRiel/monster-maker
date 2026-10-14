@@ -30,6 +30,11 @@ GPU_STEPS: dict[str, GpuStep] = {
     "ai3d": GpuStep(inputs={"image": ("imagined",)}, outputs={"mesh_ai": "ai.glb"}),
 }
 
+# What the kid's AI version is made of, picked on the 3D screen. The GPU worker turns the name into
+# words for the imagine prompt (gpu/monster_gpu/imagine.py, SKINS); the tablet draws one icon each.
+SKINS = ("toy", "fluffy", "slimy", "scaly", "knitted", "clay", "candy", "metal")
+DEFAULT_SKIN = "toy"
+
 # Steps queued when a step finishes: (step, worker kind)
 NEXT_STEPS: dict[str, list[tuple[str, str]]] = {
     "cleanup": [("balloon", "cpu"), ("print_prep", "cpu"), ("imagine", "gpu")],

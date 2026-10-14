@@ -33,7 +33,7 @@ YAW_DEG = float(os.environ.get("MONSTER_AI_YAW_DEG", "0"))     # turn the result
 HEIGHT_M = 0.20  # same as the faithful balloon (server/monster/steps/balloon.py)
 
 
-def run(inputs: dict[str, Path], out: Path) -> dict[str, str]:
+def run(inputs: dict[str, Path], out: Path, params: dict | None = None) -> dict[str, str]:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     import torch

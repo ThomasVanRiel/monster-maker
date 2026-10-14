@@ -1,6 +1,6 @@
 """Run one GPU step on a local picture, without the server: for trying the models out on the PC.
 
-    python -m monster_gpu.try_step imagine path/to/creature.png [out dir]
+    python -m monster_gpu.try_step imagine path/to/creature.png [out dir] [--skin=slimy]
     python -m monster_gpu.try_step ai3d out-dir/imagined.png [out dir]
 
 In the dev stack: docker compose -f compose.dev.yaml --profile gpu run --rm gpu-worker \\
@@ -17,15 +17,17 @@ from .steps import PLACEHOLDERS, STEPS
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    params = {a[2:].split("=", 1)[0]: a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--") and "=" in a}
+    if len(args) < 2:
         raise SystemExit(__doc__)
-    step, image = sys.argv[1], Path(sys.argv[2])
-    out = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("try-out")
+    step, image = args[0], Path(args[1])
+    out = Path(args[2]) if len(args) > 2 else Path("try-out")
     out.mkdir(parents=True, exist_ok=True)
     target = (PLACEHOLDERS if "--placeholder" in sys.argv else STEPS)[step]
     module, func = target.split(":")
     t0 = time.monotonic()
-    produced = getattr(importlib.import_module(module), func)({"image": image}, out)
+    produced = getattr(importlib.import_module(module), func)({"image": image}, out, params)
     took = time.monotonic() - t0
     for kind, name in produced.items():
         size = (out / name).stat().st_size / 1e6

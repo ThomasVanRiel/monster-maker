@@ -10,14 +10,14 @@ HEIGHT_M = 0.20
 THICK_M = 0.004
 
 
-def imagine(inputs: dict[str, Path], out: Path) -> dict[str, str]:
+def imagine(inputs: dict[str, Path], out: Path, params: dict | None = None) -> dict[str, str]:
     png = inputs["image"].read_bytes()
     png_size(png)
     (out / "imagined.png").write_bytes(png)
     return {"imagined": "imagined.png"}
 
 
-def run(inputs: dict[str, Path], out: Path) -> dict[str, str]:
+def run(inputs: dict[str, Path], out: Path, params: dict | None = None) -> dict[str, str]:
     png = inputs["image"].read_bytes()
     (out / "ai.glb").write_bytes(card_glb(png))
     return {"mesh_ai": "ai.glb"}

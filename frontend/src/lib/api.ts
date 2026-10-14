@@ -5,6 +5,9 @@ export type Eye = { x: number; y: number; r: number };
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'waiting_for_gpu';
 export type Job = { id: number; step: string; status: JobStatus; worker: 'cpu' | 'gpu'; attempts: number; error: string | null };
 export type Style = 'faithful' | 'ai';
+/** What the AI version is made of (server/monster/steps/__init__.py, SKINS). */
+export const SKINS = ['toy', 'fluffy', 'slimy', 'scaly', 'knitted', 'clay', 'candy', 'metal'] as const;
+export type Skin = (typeof SKINS)[number];
 export type Creature = {
 	id: number;
 	kid_id: number;
@@ -13,6 +16,7 @@ export type Creature = {
 	chosen_style: Style | null;
 	eyes: Eye[];
 	rotation: number;
+	skin: Skin;
 	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'imagined' | 'mesh_ai' | 'print_3mf', string>>;
 	jobs: Job[];
 };
@@ -32,7 +36,7 @@ async function call<T>(method: string, path: string, body?: BodyInit | object): 
 export const listKids = () => call<Kid[]>('GET', '/kids');
 export const listCreatures = (kidId: number) => call<Creature[]>('GET', `/creatures?kid_id=${kidId}`);
 export const getCreature = (id: number) => call<Creature>('GET', `/creatures/${id}`);
-export const updateCreature = (id: number, patch: { name?: string; eyes?: Eye[]; chosen_style?: Style }) =>
+export const updateCreature = (id: number, patch: { name?: string; eyes?: Eye[]; chosen_style?: Style; skin?: Skin }) =>
 	call<Creature>('PATCH', `/creatures/${id}`, patch);
 export const deleteCreature = (id: number) => call<void>('DELETE', `/creatures/${id}`);
 /** The gaming PC that makes the AI 3D versions: is it around, and how much waits for it. */

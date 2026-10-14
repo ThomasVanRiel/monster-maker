@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import db, jobs
 from .config import Settings, load_settings
-from .steps import GPU_STEPS, NEXT_STEPS
+from .steps import DEFAULT_SKIN, GPU_STEPS, NEXT_STEPS, SKINS
 
 # The events stream ends once every job is here. A GPU job waiting for the gaming PC counts: it
 # may wait for days, and the tablet shows that as sleeping, not as busy.
@@ -57,6 +57,7 @@ class CreatureUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=40)
     eyes: list[Eye] | None = Field(default=None, max_length=6)
     chosen_style: Literal["faithful", "ai"] | None = None  # the 3D version the kid picked
+    skin: Literal[SKINS] | None = None  # what the AI version is made of; a new one makes it again
 
 
 WorkerState = Field(max_length=40, pattern=r"^[a-z_]+$")
@@ -146,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "chosen_style": row["chosen_style"],
             "eyes": json.loads(row["eyes"]),
             "rotation": row["rotation"],
+            "skin": row["skin"] or DEFAULT_SKIN,
             "files": files,
             "jobs": [dict(j) for j in job_rows],
         }
@@ -217,7 +219,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             conn.execute("UPDATE creatures SET eyes = ? WHERE id = ?", (eyes, creature_id))
         if body.chosen_style is not None:
             conn.execute("UPDATE creatures SET chosen_style = ? WHERE id = ?", (body.chosen_style, creature_id))
+        if body.skin is not None:
+            reskin(conn, creature_id, body.skin)
         return creature_out(conn, creature_or_404(conn, creature_id))
+
+    def reskin(conn: sqlite3.Connection, creature_id: int, skin: str) -> None:
+        """A new skin: imagine runs again (it reads the skin when the GPU worker claims it), then
+        ai3d. The old AI version stays until the new one is there; the gaming PC may be off for days."""
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            old = conn.execute("SELECT skin FROM creatures WHERE id = ?", (creature_id,)).fetchone()["skin"]
+            conn.execute("UPDATE creatures SET skin = ? WHERE id = ?", (skin, creature_id))
+            cleaned = conn.execute(  # before that, cleanup queues imagine itself
+                "SELECT 1 FROM artifacts WHERE creature_id = ? AND kind IN ('creature', 'cutout')",
+                (creature_id,)).fetchone()
+            if cleaned and (old or DEFAULT_SKIN) != skin:
+                # an ai3d still waiting would only make the old skin in 3D
+                conn.execute("DELETE FROM jobs WHERE creature_id = ? AND step = 'ai3d' AND status = 'waiting_for_gpu'",
+                             (creature_id,))
+                if not conn.execute(  # one waiting is enough: the skin is read at claim time
+                        "SELECT 1 FROM jobs WHERE creature_id = ? AND step = 'imagine' AND status = 'waiting_for_gpu'",
+                        (creature_id,)).fetchone():
+                    jobs.enqueue(conn, creature_id, "imagine", "gpu")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
 
     @app.post("/creatures/{creature_id}/rotate")
     def rotate_creature(creature_id: int, body: Rotate, conn: Conn):
@@ -338,8 +365,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 jobs.fail(conn, job["id"], body.worker_id, f"missing inputs: {', '.join(missing)}")
                 continue
             seen(conn, body.worker_id, "working", f"{job['step']} for creature {job['creature_id']}")
+            skin = conn.execute("SELECT skin FROM creatures WHERE id = ?", (job["creature_id"],)).fetchone()["skin"]
             return {"id": job["id"], "creature_id": job["creature_id"], "step": job["step"],
-                    "attempts": job["attempts"], "lease_seconds": settings.lease_seconds, "inputs": inputs}
+                    "attempts": job["attempts"], "lease_seconds": settings.lease_seconds, "inputs": inputs,
+                    "params": {"skin": skin or DEFAULT_SKIN}}
         return Response(status_code=204)
 
     @app.post("/worker/jobs/{job_id}/heartbeat", dependencies=[Worker], status_code=204)

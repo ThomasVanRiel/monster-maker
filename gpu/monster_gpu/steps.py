@@ -1,8 +1,9 @@
 """The steps this worker can run, as "module:function" so a step's heavy imports (torch, FLUX.2,
 TRELLIS) only happen in the child process that runs it.
 
-A step is run(inputs: {name: Path}, out: Path) -> {artifact kind: file name in out}. The server
-decides what the inputs and outputs are (server/monster/steps/__init__.py, GPU_STEPS).
+A step is run(inputs: {name: Path}, out: Path, params: dict) -> {artifact kind: file name in out}.
+The server decides what the inputs and outputs are (server/monster/steps/__init__.py, GPU_STEPS);
+params are the kid's choices for the creature, e.g. {"skin": "slimy"}.
 """
 
 STEPS = {

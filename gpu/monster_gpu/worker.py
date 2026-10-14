@@ -121,14 +121,16 @@ class Worker:
         (release, why) or (lost, '')."""
         out = work / "out"
         out.mkdir()
-        (work / "inputs.json").write_text(json.dumps({k: str(v) for k, v in inputs.items()}))
+        # params: the kid's choices (skin); an older server sends none
+        (work / "job.json").write_text(json.dumps(
+            {"inputs": {k: str(v) for k, v in inputs.items()}, "params": job.get("params") or {}}))
         log_path = work / "step.log"
         lease = float(job.get("lease_seconds") or 600)
         beat_every = max(WATCH_SECONDS, lease / 3)
         with open(log_path, "wb") as logf:
             self.child = subprocess.Popen(
                 [sys.executable, "-m", "monster_gpu.run_step", self.steps[job["step"]],
-                 str(work / "inputs.json"), str(out)],
+                 str(work / "job.json"), str(out)],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=child_env())
             # the step's own output (model downloads, progress) into the worker's log as well
             tee = threading.Thread(target=_tee, args=(self.child.stdout, logf), daemon=True)

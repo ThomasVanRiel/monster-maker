@@ -31,7 +31,30 @@ function tone(type: OscillatorType, f0: number, f1: number, dur: number, vol: nu
 	o.stop(t + dur + 0.05);
 }
 
+import type { Skin } from './api';
+
+// One little sound per material, played when the kid picks it.
+const SKIN_SOUNDS: Record<Skin, () => void> = {
+	toy: () => tone('sine', 900, 1500, 0.12, 0.2), // squeak
+	fluffy: () => tone('sine', 420, 260, 0.25, 0.12), // soft puff
+	slimy: () => {
+		tone('sine', 420, 70, 0.35, 0.3); // squelch
+		tone('sine', 180, 60, 0.3, 0.2, 0.08);
+	},
+	scaly: () => [0, 0.05, 0.1, 0.15].forEach((t) => tone('square', 1800, 900, 0.03, 0.06, t)), // rattle
+	knitted: () => [0, 0.12].forEach((t) => tone('triangle', 700, 650, 0.08, 0.12, t)), // click-clack
+	clay: () => tone('sine', 200, 55, 0.22, 0.35), // thud
+	candy: () => [1319, 1568, 2093].forEach((f, i) => tone('triangle', f, f, 0.15, 0.12, i * 0.07)), // sparkle
+	metal: () => {
+		tone('square', 880, 860, 0.4, 0.08); // clang
+		tone('triangle', 1320, 1300, 0.5, 0.1);
+	}
+};
+
 export const sfx = {
+	skin(skin: Skin) {
+		SKIN_SOUNDS[skin]();
+	},
 	boing() {
 		tone('sine', 160, 520, 0.16, 0.3);
 		tone('sine', 520, 230, 0.26, 0.22, 0.14);
