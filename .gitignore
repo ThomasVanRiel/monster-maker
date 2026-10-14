@@ -33,3 +33,6 @@ cutout-debug/
 # private, machine-local: real domain, addresses, working configs (see CLAUDE.local.md)
 CLAUDE.local.md
 *.local.conf
+
+# Windows download markers, created when copying files into WSL
+*:Zone.Identifier
