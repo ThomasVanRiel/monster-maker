@@ -81,6 +81,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 
 - [x] `print_prep` CPU step after `cleanup` → `print.3mf` (artifact `print_3mf`) for the Prusa MK3S+ (single colour, 0.4 mm nozzle, PrusaSlicer): "standing" on an oval plinth and "lying" on a base plate, pen lines engraved. Download from parent mode. Meshes are checked and unioned with manifold3d.
 - [ ] Test prints; tune engraving depth/width, plinth size and the 8 cm height
+- [ ] Idea, not started: print the AI version too. A CPU step after `ai3d` (`ai.glb`) → e.g. `print_ai.3mf` (new artifact kind), offered beside `print.3mf` or following `chosen_style`. To solve: TRELLIS meshes are often not watertight, so remesh (voxelise + marching cubes at ~0.3 mm) before manifold3d; scale to the 8 cm height and sink into the oval plinth like `print_prep.py`; thin ears and fingers at that size; outstretched arms need supports; the texture is lost on a single-colour print (engrave nothing, or the eyes only?). Remade whenever `ai3d` reruns (new skin, rotate). Check the time and RAM of the remesh on the home server.
 
 ## The cutout (photo → sticker)
 
