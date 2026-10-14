@@ -6,9 +6,10 @@ Runs in a child process per job (run_step.py), so everything here is loaded and 
 - Input is creature.png: the creature alone with its mask as alpha. TRELLIS uses an image's alpha
   as is, so its own background remover (BRIA RMBG-2.0: gated, non-commercial licence) is never
   needed and is not even downloaded.
-- 16 GB VRAM: TRELLIS.2 is tested on 24 GB+. Its low-VRAM mode (on by default) moves each model
-  to the GPU only while it runs. If the chosen resolution still runs out of memory, the job tries
-  again at 512 before giving up.
+- 16 GB VRAM: TRELLIS.2 is tested on 24 GB+. Its low-VRAM mode (on by default) keeps the models
+  in RAM and moves each to the GPU only while it runs: slower, but small. With it off
+  (MONSTER_TRELLIS_LOW_VRAM=0) everything stays on the GPU. Running out of memory retries with
+  low-VRAM on, then at 512, before giving up. The log ends with the peak VRAM used.
 - The result is scaled like the faithful balloon (20 cm tall, standing on the floor, centred) so
   the two look like siblings in the viewer and in AR.
 """
@@ -26,6 +27,7 @@ PIPELINE = os.environ.get("MONSTER_TRELLIS_PIPELINE", "1024_cascade")  # 512, 10
 FACES = int(os.environ.get("MONSTER_AI_FACES", "150000"))      # after decimation: light enough for a tablet
 TEXTURE = int(os.environ.get("MONSTER_AI_TEXTURE", "2048"))
 SEED = int(os.environ.get("MONSTER_AI_SEED", "42"))
+LOW_VRAM = os.environ.get("MONSTER_TRELLIS_LOW_VRAM", "1") not in ("0", "false", "no")
 YAW_DEG = float(os.environ.get("MONSTER_AI_YAW_DEG", "0"))     # turn the result if it faces away
 HEIGHT_M = 0.20  # same as the faithful balloon (server/monster/steps/balloon.py)
 
@@ -37,22 +39,30 @@ def run(inputs: dict[str, Path], out: Path) -> dict[str, str]:
     from PIL import Image
 
     image = Image.open(inputs["image"]).convert("RGBA")
-    pipeline = load_pipeline()
-    types = [PIPELINE] + (["512"] if PIPELINE != "512" else [])
-    for i, kind in enumerate(types):
+    pipeline = load_pipeline(LOW_VRAM)
+    # (low VRAM, resolution) to try in turn when the GPU runs out of memory
+    tries = [(LOW_VRAM, PIPELINE)] + ([(True, PIPELINE)] if not LOW_VRAM else [])
+    if PIPELINE != "512":
+        tries.append((True, "512"))
+    for i, (low, kind) in enumerate(tries):
         try:
+            if low and not pipeline.low_vram:
+                to_low_vram(pipeline)
             mesh = generate(pipeline, image, kind)
             break
         except torch.cuda.OutOfMemoryError:
-            if i == len(types) - 1:
+            if i == len(tries) - 1:
                 raise
-            log.warning("out of GPU memory at %s, trying %s", kind, types[i + 1])
+            log.warning("out of GPU memory at %s (low VRAM %s), trying %s (low VRAM %s)",
+                        kind, low, tries[i + 1][1], tries[i + 1][0])
             gc.collect()
             torch.cuda.empty_cache()
     glb = to_glb(mesh)
     del mesh, pipeline
     fit(glb)
     (out / "ai.glb").write_bytes(glb.export(file_type="glb"))
+    log.info("peak VRAM %.1f GB (allocated by torch; nvidia-smi shows a bit more)",
+             torch.cuda.max_memory_allocated() / 2**30)
     return {"mesh_ai": "ai.glb"}
 
 
@@ -68,16 +78,28 @@ class _NoBackgroundRemoval:
         raise RuntimeError("input image has no alpha; expected creature.png or cutout.png")
 
 
-def load_pipeline():
+def load_pipeline(low_vram: bool):
     import trellis2.pipelines.rembg as rembg
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
 
     rembg.BiRefNet = lambda **_: _NoBackgroundRemoval()  # from_pretrained looks it up by name
     log.info("loading %s", MODEL)
     pipeline = Trellis2ImageTo3DPipeline.from_pretrained(MODEL)
-    pipeline.low_vram = True
-    pipeline.cuda()
+    pipeline.low_vram = low_vram
+    pipeline.cuda()  # with low VRAM this only picks the device; the models move as they run
     return pipeline
+
+
+def to_low_vram(pipeline) -> None:
+    """Back to RAM: from now on each model is on the GPU only while it runs."""
+    import torch
+
+    log.info("switching to low-VRAM mode")
+    for m in pipeline.models.values():
+        m.cpu()
+    pipeline.image_cond_model.cpu()
+    pipeline.low_vram = True
+    torch.cuda.empty_cache()
 
 
 def generate(pipeline, image, pipeline_type: str):
