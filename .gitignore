@@ -39,3 +39,8 @@ CLAUDE.local.md
 
 # Windows download markers, created when copying files into WSL
 *:Zone.Identifier
+
+# copies of the home server's data for local testing: never committed
+ref/
+*.sqlite-shm
+*.sqlite-wal

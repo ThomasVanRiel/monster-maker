@@ -68,8 +68,7 @@ def test_messy_mesh_becomes_one_closed_solid_on_a_plinth():
     assert m.status().name == "NoError" and len(m.decompose()) == 1  # the speck is gone
     assert abs(verts[:, 2].min()) < 1e-3
     tall = verts[:, 2].max()
-    # the thin ear on top grows by half a wall when it is thickened
-    assert abs(tall - (print_prep.HEIGHT_MM + print_prep.PLINTH_MM - print_prep.SINK_MM)) < 2
+    assert abs(tall - (print_prep.HEIGHT_MM + print_prep.PLINTH_MM - print_prep.SINK_MM)) < 0.5
     assert np.ptp(verts[:, 1]) >= 0.4 * print_prep.HEIGHT_MM
 
     # 80 mm tall: body r 24 mm, head r 20 mm, 50 mm apart; the hole is closed, so the body is solid

@@ -11,7 +11,8 @@ overlap, specks floating beside the body. Rather than repair them, the shape is 
    in along 5 of the 6 axis directions: a bigger hole would otherwise leave the body hollow. Pockets
    open on one side only (a wide-open mouth) get filled too.
 4. Thicken parts thinner than MIN_WALL_MM (ears, fingers, horns) so they print and don't snap.
-5. Keep the largest piece: specks would only fall off.
+5. Keep the largest piece: specks would only fall off. Scale it back to HEIGHT_MM, in case a
+   dropped speck was the top.
 6. Marching cubes on the lightly smoothed grid gives a new closed surface; simplify it.
 
 One colour can't show the texture, so nothing is engraved.
@@ -48,6 +49,10 @@ def print_ai_3mf(verts: np.ndarray, tris: np.ndarray) -> bytes:
 def print_mesh(verts: np.ndarray, tris: np.ndarray):
     """(verts, tris) in mm, Z up, on the bed: the rebuilt creature on its plinth."""
     body, faces = rebuild(on_bed(verts), tris)
+    # back to HEIGHT_MM: a dropped speck may have been the top, a thickened ear grows a little
+    centre = (body[:, :2].min(axis=0) + body[:, :2].max(axis=0)) / 2
+    body[:, :2] = (body[:, :2] - centre) * (HEIGHT_MM / body[:, 2].max()) + centre
+    body[:, 2] *= HEIGHT_MM / body[:, 2].max()
     return on_plinth(body, faces, "AI")
 
 
@@ -86,11 +91,12 @@ def rebuild(verts: np.ndarray, tris: np.ndarray):
     solid = ndimage.distance_transform_edt(ndimage.binary_fill_holes(grown)) > close
     del grown
 
-    # thin parts: what an opening by `wall` removes gets grown by `wall`
+    # thin parts: what an opening by `wall` removes gets grown by `wall`. Only what lies clearly
+    # outside the opened shape: the one-voxel jags of any surface would each grow a bump.
     core = ndimage.distance_transform_edt(solid) > wall
     opened = ndimage.distance_transform_edt(~core) <= wall
     del core
-    thin = solid & ~opened
+    thin = solid & (ndimage.distance_transform_edt(~opened) > 1.5)
     del opened
     if thin.any():
         solid |= ndimage.distance_transform_edt(~thin) <= wall
