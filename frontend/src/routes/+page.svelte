@@ -141,6 +141,7 @@
 {:else if screen === 'puff' && puffed}
 	<Puff
 		creature={puffed}
+		{parent}
 		onback={() => (screen = 'hill')}
 		onchoose={(style) => choose(puffed.id, style)}
 		onskin={(skin) => reskin(puffed.id, skin)}

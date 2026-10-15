@@ -65,7 +65,7 @@ The model is about 20 cm tall in AR and stands on the floor or table it is place
 
 ## 3D printing
 
-Every monster also gets a `print.3mf` (parent mode → the dark printer button on the monster). It holds two versions side by side; delete the one you don't want in the slicer:
+Every monster also gets a `print.3mf`: in parent mode, open the monster in 3D and tap the dark printer button under the back arrow. It downloads the print of the version in front. It holds two versions side by side; delete the one you don't want in the slicer:
 
 - **standing** — the whole balloon, 8 cm tall, feet sunk into an oval plinth. The arms usually need supports.
 - **lying** — the front half on a 1.6 mm base plate, printed on its back. No supports, sturdiest for small hands.
@@ -76,7 +76,7 @@ Every monster also gets a `print.3mf` (parent mode → the dark printer button o
 
 Tuned for a single-colour FDM printer with a 0.4 mm nozzle (Prusa MK3S+ with PrusaSlicer): the drawing's pen lines are engraved 0.6 mm deep and widened to about 1 mm so the nozzle can draw them. Sizes and depths are constants at the top of `server/monster/steps/print_prep.py`.
 
-Once the gaming PC has made the AI version, it gets a `print_ai.3mf` too (the printer button with a sparkle, below the first): the AI model standing on the same oval plinth, 8 cm tall. TRELLIS meshes are often not closed, so `server/monster/steps/print_ai.py` rebuilds the shape in a 0.3 mm voxel grid: holes are closed, specks floating beside it dropped, and parts thinner than 1.2 mm (ears, fingers) thickened. One colour can't show its texture, so nothing is engraved. Outstretched arms need supports.
+Once the gaming PC has made the AI version, it gets a `print_ai.3mf` too (the same printer button, with the AI version in front): the AI model standing on the same oval plinth, 8 cm tall. TRELLIS meshes are often not closed, so `server/monster/steps/print_ai.py` rebuilds the shape in a 0.3 mm voxel grid: holes are closed, specks floating beside it dropped, and parts thinner than 1.2 mm (ears, fingers) thickened. One colour can't show its texture, so nothing is engraved. Outstretched arms need supports.
 
 ## AI 3D (GPU worker on the gaming PC)
 

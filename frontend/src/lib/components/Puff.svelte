@@ -5,6 +5,7 @@
 	// bubble swaps the two, and the one in front is the kid's pick (chosen_style).
 	// The swatch in the top corner is what the AI version is made of (fluffy, slimy, metal, ...):
 	// it opens the other swatches, and a new pick makes the AI version again on the gaming PC.
+	// In parent mode a printer button downloads the print file of the one in front.
 	// model-viewer (and three.js) load only when this screen opens.
 	import { onMount, untrack } from 'svelte';
 	import { getGpu, SKINS, type Creature, type Skin, type Style } from '../api';
@@ -13,11 +14,13 @@
 
 	let {
 		creature,
+		parent = false,
 		onback,
 		onchoose,
 		onskin
 	}: {
 		creature: Creature;
+		parent?: boolean;
 		onback: () => void;
 		onchoose: (style: Style) => void;
 		onskin: (skin: Skin) => void;
@@ -44,6 +47,9 @@
 		untrack(() => (creature.chosen_style === 'ai' && creature.files.mesh_ai ? 'ai' : 'faithful'))
 	);
 	const other = $derived<Style>(front === 'ai' ? 'faithful' : 'ai');
+
+	// the AI print is made after the AI version, so for a moment it may not be there yet
+	const print = $derived(front === 'ai' ? creature.files.print_ai_3mf : creature.files.print_3mf);
 
 	function swap() {
 		sfx.boing();
@@ -165,6 +171,18 @@
 			><path d="M15 5 L8 12 L15 19" /></svg
 		>
 	</button>
+	{#if parent && print}
+		<a
+			class="print"
+			href={print}
+			download="{creature.name || `monster-${creature.id}`}{front === 'ai' ? '-ai' : ''}.3mf"
+			aria-label="Download {front === 'ai' ? 'the AI version' : 'the puffy version'} for the 3D printer"
+		>
+			<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+				><path d="M7 9V3h10v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg
+			>
+		</a>
+	{/if}
 </section>
 
 <style>
@@ -272,6 +290,7 @@
 		}
 	}
 	.back,
+	.print,
 	.ar {
 		position: absolute;
 		display: grid;
@@ -290,6 +309,17 @@
 		border: 5px solid var(--ink);
 	}
 	.back svg {
+		width: 55%;
+	}
+	.print {
+		top: calc(32px + clamp(64px, 11vmin, 92px) + env(safe-area-inset-top, 0px));
+		left: calc(16px + env(safe-area-inset-left, 0px));
+		width: clamp(64px, 11vmin, 92px);
+		aspect-ratio: 1;
+		background: var(--ink);
+		border: 5px solid var(--paper);
+	}
+	.print svg {
 		width: 55%;
 	}
 	.ar {

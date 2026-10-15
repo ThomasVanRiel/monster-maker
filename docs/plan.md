@@ -143,7 +143,7 @@ Checked on the gaming PC: VRAM of both steps and which way the result faces (`MO
 
 ### Phase 3, first step: print prep (done)
 
-`print_prep` CPU step after `cleanup` → `print.3mf` for the home printer, a Prusa MK3S+ (single colour, 0.4 mm nozzle). Two objects: "standing" (balloon 8 cm tall, feet sunk 2 mm into a 3 mm oval plinth at least 40% as deep as it is tall) and "lying" (front half on a 1.6 mm plate, no supports). One colour can't show the drawing, so thin dark strokes are engraved 0.6 mm deep, widened to ~1 mm. Both are checked as closed solids (manifold3d); the plinth is a boolean union. Downloaded from parent mode.
+`print_prep` CPU step after `cleanup` → `print.3mf` for the home printer, a Prusa MK3S+ (single colour, 0.4 mm nozzle). Two objects: "standing" (balloon 8 cm tall, feet sunk 2 mm into a 3 mm oval plinth at least 40% as deep as it is tall) and "lying" (front half on a 1.6 mm plate, no supports). One colour can't show the drawing, so thin dark strokes are engraved 0.6 mm deep, widened to ~1 mm. Both are checked as closed solids (manifold3d); the plinth is a boolean union. Downloaded from the 3D view in parent mode (the print of the version in front).
 
 `print_ai` CPU step after `ai3d` → `print_ai.3mf`: the AI model standing on the same plinth. TRELLIS meshes are not reliably closed (holes, texture seams, overlapping shells, specks), so the shape is rebuilt in a 0.3 mm voxel grid rather than repaired: surface sampled into voxels, gaps closed by 1 mm, inside = unreachable from outside or walled in on 5 of 6 axis directions, parts under 1.2 mm thickened, largest piece kept, marching cubes, simplified by 0.05 mm. No engraving.
 
