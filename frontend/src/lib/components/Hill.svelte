@@ -194,6 +194,21 @@
 							>
 						</a>
 					{/if}
+					{#if cr.files.print_ai_3mf}
+						<a
+							class="print ai"
+							href={cr.files.print_ai_3mf}
+							download="{cr.name || `monster-${cr.id}`}-ai.3mf"
+							aria-label="Download the AI version of {cr.name || 'this monster'} for the 3D printer"
+						>
+							<svg class="sparkle" viewBox="0 0 24 24" aria-hidden="true"
+								><path d="M12 1 L14.6 9.4 L23 12 L14.6 14.6 L12 23 L9.4 14.6 L1 12 L9.4 9.4 Z" /></svg
+							>
+							<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+								><path d="M7 9V3h10v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg
+							>
+						</a>
+					{/if}
 					{#if cr.files.cutout}
 						<button type="button" class="turn" aria-label="Turn {cr.name || 'this monster'}" onclick={() => onrotate(cr.id)}>
 							<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
@@ -604,6 +619,19 @@
 	}
 	.parent .print {
 		display: grid;
+	}
+	.print.ai {
+		top: 52px;
+	}
+	.print .sparkle {
+		position: absolute;
+		top: -10px;
+		right: -10px;
+		width: 24px;
+		fill: var(--paper);
+		stroke: var(--ink);
+		stroke-width: 2.2;
+		stroke-linejoin: round;
 	}
 	.turn {
 		display: none;

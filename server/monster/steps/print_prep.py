@@ -79,9 +79,13 @@ def to_bed(p: np.ndarray) -> np.ndarray:
 def standing_mesh(sh, z, mask):
     xy, zz, faces = mirrored(sh, z)
     body = to_bed(world(xy, zz, mask, HEIGHT_MM))
-    body[:, 2] += PLINTH_MM - SINK_MM
+    return on_plinth(body, faces, "balloon")
 
-    # plinth: an oval around where the feet touch, at least 40% as deep as the creature is tall
+
+def on_plinth(body: np.ndarray, faces: np.ndarray, what: str):
+    """A closed creature mesh (mm, Z up, lowest point at Z = 0) with its feet sunk SINK_MM into an
+    oval plinth around where they touch, at least 40% as deep as the creature is tall."""
+    body = body + [0, 0, PLINTH_MM - SINK_MM]
     feet = body[body[:, 2] < PLINTH_MM + 2]
     x0, x1 = feet[:, 0].min(), feet[:, 0].max()
     width = x1 - x0 + 12
@@ -92,7 +96,7 @@ def standing_mesh(sh, z, mask):
     creature = Manifold(Mesh(vert_properties=np.ascontiguousarray(body, np.float32),
                              tri_verts=np.ascontiguousarray(faces, np.uint32)))
     if creature.status().name != "NoError":
-        raise ValueError(f"balloon mesh is not printable: {creature.status()}")
+        raise ValueError(f"{what} mesh is not printable: {creature.status()}")
     solid = (creature + plinth).to_mesh()
     return np.array(solid.vert_properties[:, :3], np.float32), np.array(solid.tri_verts, np.uint32)
 

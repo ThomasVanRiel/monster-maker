@@ -271,7 +271,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             for kind, path in paths.items():
                 jobs.add_artifact(conn, creature_id, None, kind, f"{creature_id}/{path.name}")
             # the AI version of the sideways drawing would stay until the gaming PC is on again
-            conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind IN ('imagined', 'mesh_ai')",
+            conn.execute("DELETE FROM artifacts WHERE creature_id = ? AND kind IN ('imagined', 'mesh_ai', 'print_ai_3mf')",
+                         (creature_id,))
+            # ... and a print of it still queued would bring it back
+            conn.execute("DELETE FROM jobs WHERE creature_id = ? AND step = 'print_ai' AND status = 'queued'",
                          (creature_id,))
             queued = {r["step"] for r in conn.execute(
                 "SELECT step FROM jobs WHERE creature_id = ? AND status IN ('queued', 'waiting_for_gpu')",

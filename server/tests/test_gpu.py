@@ -77,9 +77,15 @@ def test_round_trip_with_placeholder_step(client, settings, tmp_path):
     assert w.tick() is False  # nothing left
 
     c = client.get(f"/creatures/{cid}").json()
-    assert c["jobs"][-1]["step"] == "ai3d" and c["jobs"][-1]["status"] == "done"
+    assert c["jobs"][-2]["step"] == "ai3d" and c["jobs"][-2]["status"] == "done"
     glb = client.get(c["files"]["mesh_ai"].removeprefix("/api"))
     assert glb.headers["content-type"] == "model/gltf-binary" and glb.content[:4] == b"glTF"
+    assert c["jobs"][-1]["step"] == "print_ai" and c["jobs"][-1]["status"] == "queued"
+    conn = db.connect(settings.db_path)
+    worker.run_one(conn, settings, jobs.claim(conn, "cpu", "test", 60, 3), "test")  # print the AI version
+    conn.close()
+    c = client.get(f"/creatures/{cid}").json()
+    assert client.get(c["files"]["print_ai_3mf"].removeprefix("/api")).headers["content-type"] == "model/3mf"
     status = client.get("/gpu").json()
     assert status["waiting"] == 0 and status["workers"][0]["id"] == "gpu@test"
     assert status["workers"][0]["state"] == "ready"
@@ -94,8 +100,9 @@ def test_rotate_drops_the_ai_version_and_waits_for_a_new_one(client, settings, t
     w = gpu_worker(client, tmp_path)
     w.tick()
     w.tick()
-    c = client.post(f"/creatures/{cid}/rotate", json={}).json()
-    assert "mesh_ai" not in c["files"] and "imagined" not in c["files"]
+    c = client.post(f"/creatures/{cid}/rotate", json={}).json()  # while the AI print still waits
+    assert not {"mesh_ai", "imagined", "print_ai_3mf"} & set(c["files"])
+    assert "print_ai" not in [j["step"] for j in c["jobs"] if j["status"] == "queued"]
     client.post(f"/creatures/{cid}/rotate", json={})
     conn = db.connect(settings.db_path)
     while (job := jobs.claim(conn, "cpu", "test", 60, 3)) is not None:  # balloon (twice), print

@@ -42,7 +42,7 @@ Code is developed on several machines; none of them is the server. Git is the si
 - Python + FastAPI, SQLite (jobs table with leases as the queue; no Redis), server-sent events for progress.
 - The home server's existing nginx terminates HTTPS (Let's Encrypt, LAN-restricted); Caddy inside the stack serves the SPA and routes `/api` over HTTP.
 - Docker Compose for deployment.
-- CPU steps: OpenCV, rembg (later trimesh / PyMeshLab).
+- CPU steps: OpenCV, rembg, manifold3d, scikit-image (marching cubes).
 - Frontend: tablet PWA in **SvelteKit** (Svelte 5 runes, static adapter as an SPA), package manager **pnpm**.
 - Repo on **GitHub**; CI = GitHub Actions, registry = GHCR.
 - Animation: canvas / PixiJS mesh warp of the cutout, in the browser.
@@ -54,7 +54,7 @@ Kid → Creature (one per drawing) → Jobs (pipeline steps) → Artifacts (file
 - Kid: id, name, avatar colour
 - Creature: id, kid_id, name, created_at, chosen_style, eyes, rotation (quarter turns applied to the cutout, for drawings made sideways), skin (what the AI version is made of; `SKINS` in `server/monster/steps/__init__.py`)
 - Job: id, creature_id, step, status (`queued`, `running`, `done`, `failed`, `waiting_for_gpu`), worker (`cpu`/`gpu`), attempts, error, lease
-- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, `creature`, `mesh_faithful`, `imagined`, `mesh_ai`, `print_3mf`, later `rig`, `anim`), path
+- Artifact: id, creature_id, job_id, kind (`photo`, `cutout`, `mask`, `creature`, `mesh_faithful`, `imagined`, `mesh_ai`, `print_3mf`, `print_ai_3mf`, later `rig`, `anim`), path
 - Worker (remote GPU workers' check-ins): id, kind, state, detail, last_seen
 
 Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = that folder + the SQLite file.
@@ -81,7 +81,7 @@ Files live in `creatures/{id}/` (`drawing.jpg`, `cutout.png`, …). Backup = tha
 
 - [x] `print_prep` CPU step after `cleanup` → `print.3mf` (artifact `print_3mf`) for the Prusa MK3S+ (single colour, 0.4 mm nozzle, PrusaSlicer): "standing" on an oval plinth and "lying" on a base plate, pen lines engraved. Download from parent mode. Meshes are checked and unioned with manifold3d.
 - [ ] Test prints; tune engraving depth/width, plinth size and the 8 cm height
-- [ ] Idea, not started: print the AI version too. A CPU step after `ai3d` (`ai.glb`) → e.g. `print_ai.3mf` (new artifact kind), offered beside `print.3mf` or following `chosen_style`. To solve: TRELLIS meshes are often not watertight, so remesh (voxelise + marching cubes at ~0.3 mm) before manifold3d; scale to the 8 cm height and sink into the oval plinth like `print_prep.py`; thin ears and fingers at that size; outstretched arms need supports; the texture is lost on a single-colour print (engrave nothing, or the eyes only?). Remade whenever `ai3d` reruns (new skin, rotate). Check the time and RAM of the remesh on the home server.
+- [x] Print the AI version: `print_ai` CPU step after `ai3d` → `print_ai.3mf` (artifact `print_ai_3mf`), offered beside `print.3mf` (sparkle printer button in parent mode). `server/monster/steps/print_ai.py` reads `ai.glb`, scales to the 8 cm height, rebuilds it in a 0.3 mm voxel grid (closes gaps, counts what is walled in on 5 of 6 axis directions as inside so bigger holes don't leave it hollow, thickens parts under 1.2 mm, keeps the largest piece), marching cubes (scikit-image), simplify, then the same oval plinth as `print_prep` (`on_plinth`). Nothing engraved. Remade when `ai3d` reruns; rotate drops it. Measured on a dev machine: ~5 s / 0.7 GB for a 150k-face creature, ~27 s / 1.9 GB for one 2.5× wider than tall. Not yet tried on a real TRELLIS mesh or printed.
 
 ## The cutout (photo → sticker)
 

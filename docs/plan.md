@@ -139,11 +139,13 @@ The `ai3d` GPU step after `cleanup` turns `creature.png` (the creature alone, it
 
 Update: TRELLIS copies the picture it gets, and from the drawing (or the balloon-shaded `puffy.png`) it made a puffed-up drawing without character. A GPU step `imagine` now comes first: FLUX.2 [klein] 4B (Apache 2.0, ~13 GB, 4 steps) redraws the drawing as an animated-film character (same shape, colours and number of eyes and limbs; prompt in `gpu/monster_gpu/imagine.py`), BiRefNet (MIT) cuts it out → `imagined.png`, and `ai3d` makes the 3D model from that. Cloud models were considered and left out: the PC can do it, and the drawings stay home. Qwen-Image-Edit-2511 (Apache 2.0, 20B, needs a 4-bit build on 16 GB) is the fallback if klein strays too far from the drawing.
 
-Checked on the gaming PC: VRAM of both steps and which way the result faces (`MONSTER_AI_YAW_DEG`); `1024_cascade` falls back to `512` on out-of-memory. DINOv3 is gated on Hugging Face (needs a token once); its licence is worldwide, with Meta Platforms Ireland as licensor in the EEA, so unlike Hunyuan3D it covers Belgium. AI versions aren't printed yet: `print_prep` still uses the balloon.
+Checked on the gaming PC: VRAM of both steps and which way the result faces (`MONSTER_AI_YAW_DEG`); `1024_cascade` falls back to `512` on out-of-memory. DINOv3 is gated on Hugging Face (needs a token once); its licence is worldwide, with Meta Platforms Ireland as licensor in the EEA, so unlike Hunyuan3D it covers Belgium. The AI version is printed too: `print_ai` after `ai3d` (see Phase 3).
 
 ### Phase 3, first step: print prep (done)
 
 `print_prep` CPU step after `cleanup` → `print.3mf` for the home printer, a Prusa MK3S+ (single colour, 0.4 mm nozzle). Two objects: "standing" (balloon 8 cm tall, feet sunk 2 mm into a 3 mm oval plinth at least 40% as deep as it is tall) and "lying" (front half on a 1.6 mm plate, no supports). One colour can't show the drawing, so thin dark strokes are engraved 0.6 mm deep, widened to ~1 mm. Both are checked as closed solids (manifold3d); the plinth is a boolean union. Downloaded from parent mode.
+
+`print_ai` CPU step after `ai3d` → `print_ai.3mf`: the AI model standing on the same plinth. TRELLIS meshes are not reliably closed (holes, texture seams, overlapping shells, specks), so the shape is rebuilt in a 0.3 mm voxel grid rather than repaired: surface sampled into voxels, gaps closed by 1 mm, inside = unreachable from outside or walled in on 5 of 6 axis directions, parts under 1.2 mm thickened, largest piece kept, marching cubes, simplified by 0.05 mm. No engraving.
 
 ## Risks and open questions
 

@@ -17,7 +17,7 @@ export type Creature = {
 	eyes: Eye[];
 	rotation: number;
 	skin: Skin;
-	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'imagined' | 'mesh_ai' | 'print_3mf', string>>;
+	files: Partial<Record<'photo' | 'cutout' | 'mask' | 'creature' | 'mesh_faithful' | 'imagined' | 'mesh_ai' | 'print_3mf' | 'print_ai_3mf', string>>;
 	jobs: Job[];
 };
 

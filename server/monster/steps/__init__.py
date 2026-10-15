@@ -4,12 +4,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import balloon, cleanup, print_prep
+from . import balloon, cleanup, print_ai, print_prep
 
 CPU_STEPS: dict[str, Callable[[Path], dict[str, str]]] = {
     "cleanup": cleanup.run,
     "balloon": balloon.run,
     "print_prep": print_prep.run,
+    "print_ai": print_ai.run,
 }
 
 
@@ -39,4 +40,5 @@ DEFAULT_SKIN = "toy"
 NEXT_STEPS: dict[str, list[tuple[str, str]]] = {
     "cleanup": [("balloon", "cpu"), ("print_prep", "cpu"), ("imagine", "gpu")],
     "imagine": [("ai3d", "gpu")],
+    "ai3d": [("print_ai", "cpu")],
 }
